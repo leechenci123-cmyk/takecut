@@ -1,37 +1,51 @@
-# 复听 Takecut
+# Takecut (复听)
 
-复听是给中文单人口播创作者用的本地音频剪辑台。把录音拖进窗口，在逐字稿里试听几遍重录，选出想留的一遍，再导出音频和对应字幕。
+[中文说明](README.zh.md)
 
-## 在这台 Windows 电脑上使用
+A local, transcript-driven audio editor for solo Chinese voice-over creators. Drop in a raw recording, listen to each retake side by side, keep the best one, tighten the pauses, and export a clean WAV plus a matching SRT subtitle file. Everything runs on your own computer.
 
-双击 `start.cmd`，浏览器会打开剪辑台。首页自带一段约 22 秒的中文合成口播，可立即试剪。请在本地服务运行期间完成导出。刷新网页会恢复本次录音的删剪记录，重启服务后需要重新导入自己的录音。
+Built for the Devpost hackathon **Build Your First AI App 2026**.
 
-1. 点击「导入录音」或直接拖入 WAV、MP3、M4A 等含语音文件。单个文件最多 15 分钟、128 MiB。音频只会传到本机的服务。
-2. 在「重录与卡词」里分别试听各遍，点「只留这遍」。遇到有意强调的叠词，可以选「全部保留」。
-3. 在逐字稿中点时间听整句、点词回听、拖选文字。没有转出来的卡词，可以在波形上拖选，再放大波形或输入起止秒数微调。
-4. 点击「听选区」核对原声，再点「剪掉选区」。「试听剪点」会播放接缝两侧的声音，「试听剪后」播放整段。可连续撤销，原始文件始终保留。
-5. 导出 WAV 与 SRT。两者使用同一组剪辑区间。手动剪到词中间时，程序按词的剩余时长决定是否保留该词的字幕，建议试听接缝。
+![Takecut editing the bundled demo recording](demo/preview.png)
 
-## 手动剪辑
+## Problem, solution, and who it helps
 
-波形下方的「手动剪辑」支持两种操作。可以在听原声时按 I 标入点、O 标出点，再按 Shift+Backspace 剪掉这段，后面的音频在成片中会自动接上。也可以单击波形定位，按 Ctrl+B 分割，在另一端再分割一次，然后双击中间的波形并剪掉。分割本身只添加边界。
+**The problem.** When you record a voice-over alone, you rarely get a line right on the first try. You restart the sentence, stumble on a word ("我，我，我…"), or leave long gaps while you think. Cleaning this up in a general video editor means scrubbing a waveform by ear, finding each false start, cutting it, closing the gap, and then re-timing your subtitles by hand. For a ten-minute script this can take longer than the recording itself.
 
-| 快捷键（Windows） | 操作 |
-| --- | --- |
-| 空格 | 播放或暂停 |
-| ← / → | 暂停并前后微调 0.05 秒 |
-| I / O | 在播放头处标入点 / 出点 |
-| Ctrl+B | 在播放头处分割 |
-| Shift+Backspace 或 Shift+Delete | 剪掉选区并合拢 |
-| / | 试听最近剪点前后的声音 |
-| Esc | 清除选区 |
-| Ctrl+Z | 撤销删除或分割 |
+**The solution.** Takecut transcribes the recording locally with Whisper and gives you word-level timestamps, so you can edit the audio by editing the text:
 
-原声波形保留时间位置，蓝线表示分割处，黄色表示选区，红色表示已剪范围。「试听剪后」和导出使用合拢后的时间线。标记与波纹删除的键位参考 [DaVinci Resolve 官方入门指南](https://documents.blackmagicdesign.com/UserManuals/DaVinci-Resolve-17-Beginners-Guide.pdf)。
+- It groups lines that start the same way and shows them as "takes" of one sentence. You audition each take and click **Keep this take**; the others are cut.
+- It flags stuttered, repeated words and lets you cut the extra copies or keep them for emphasis.
+- You can still cut by hand on the waveform, mark in/out points with keyboard shortcuts, and insert or adjust pauses ("breaths").
+- Playback skips the cut ranges, so you always hear the edited result. The exported WAV and SRT use the same edit list, so the subtitles line up with the edited audio without re-timing.
 
-## 在另一台电脑上运行
+**Who it helps.** Solo creators who record Chinese voice-overs for videos, podcasts, courses, or social media: people who do several takes per line and want a quick first rough cut before moving into a full editor. Because the model runs offline, it also suits anyone who doesn't want to upload unreleased recordings to a cloud service.
 
-需要 Python 3.10 或以上版本、可从命令行调用的 FFmpeg 和 FFprobe，以及现代桌面浏览器。以下命令从项目目录执行。第一次安装依赖与预下载模型需要网络，之后可以离线剪辑。
+## Features
+
+- **Local transcription** with word-level timestamps (faster-whisper, `small` model, CPU int8).
+- **Retake review**: lines with a shared opening are grouped; play each take, keep one, or keep all.
+- **Repeated-word review**: stutters like "我，我，我" are flagged; cut the repeats or keep them.
+- **Transcript editing**: click a word to hear it, click a timestamp to hear the whole line, drag across words to select a range.
+- **Waveform editing**: click to place the playhead, drag to select, zoom up to 64×, fine-tune in/out points in seconds.
+- **NLE-style shortcuts**: `I` / `O` mark in and out, `Shift+Backspace` ripple-deletes, `Ctrl+B` splits, `/` auditions the last cut, `Ctrl+Z` undoes.
+- **Pause control**: insert a 0.2 / 0.4 / 0.8 s (or custom) silence at the playhead, resize it with a slider, loop-audition it, or replace an existing pause in the recording with a pause of a set length.
+- **Playback that skips cuts**: Play, line playback, and selection playback all jump over cut ranges and play inserted pauses. The clock shows time on the edited timeline.
+- **Export**: 44.1 kHz 16-bit WAV with 3 ms fades at each cut, and an SRT whose cue times follow the edits and split at inserted pauses.
+- **Non-destructive**: the original file is never changed; edits are saved in the browser and restored on reload.
+
+## AI implementation
+
+- **Speech recognition: Whisper (`small`, multilingual)** via [faster-whisper](https://github.com/SYSTRAN/faster-whisper). This is the only machine-learning model in the app. The local Python server decodes the upload with FFmpeg to 16 kHz mono and runs `WhisperModel("small", device="cpu", compute_type="int8")` with `language="zh"` and `word_timestamps=True`. The output (a list of words with start and end times) drives the transcript, every click-to-play action, the suggestions, and the subtitle timing.
+- **Retake and repeated-word detection: heuristic rules, not AI.** They run in the browser on top of Whisper's output:
+  - *Retakes*: the transcript is split into lines at sentence punctuation, long gaps, or length limits. Consecutive lines are grouped as takes when their normalized text shares a common prefix of at least 3 characters and at least 45% of the shorter line, and they are less than 4 seconds apart.
+  - *Repeated words*: consecutive identical short words (up to 4 characters) less than 0.85 s apart are flagged if the word is longer than one character, repeats three or more times, or is separated by a comma or a pause.
+  - These rules miss retakes where the wording changed a lot, and Whisper sometimes smooths over stutters or picks a wrong homophone. That's why every suggestion needs your confirmation and the waveform tools are there for anything the transcript missed.
+- **Audio editing** is plain signal processing in the browser (Web Audio API): kept ranges are concatenated sample-accurately, inserted pauses are silence, and each cut gets a short fade to avoid clicks.
+
+## Setup
+
+Requirements: **Python 3.10+**, **FFmpeg and FFprobe** on your `PATH`, and a modern desktop browser. Takecut was developed and tested on Windows; the server is plain Python, so it should also run on macOS and Linux, but that hasn't been tested. The first install and the model download need internet access; after that, editing works offline.
 
 ```powershell
 py -3 -m pip install -r requirements.txt
@@ -39,15 +53,47 @@ py -3 -c "from faster_whisper import WhisperModel; WhisperModel('small', device=
 py -3 server.py --open
 ```
 
-服务地址为 `http://127.0.0.1:8769/`。如果端口正在被其他应用使用，可用 `py -3 server.py --port 8770 --open`。示例可以在没有安装模型的情况下打开。
+(On macOS/Linux use `python3` instead of `py -3`.)
 
-## 实现与来源
+The app opens at `http://127.0.0.1:8769/`. If that port is taken, run `py -3 server.py --port 8770 --open`. On Windows you can also double-click `start.cmd`. The server only listens on `127.0.0.1`, and uploaded audio goes to a temporary folder that is deleted when the server stops.
 
-- **语音转录**使用本地 faster-whisper 的多语言 small 模型，生成中文词组和词级时间戳。文字可能简化卡词，也可能把同音字听错。波形编辑可以补上漏记的声音。[faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [Whisper](https://github.com/openai/whisper)
-- **重录建议**比较相邻句子的相同开头。叠词建议比较相邻的识别词，并考虑间隔和标点。这些是启发式规则。改写幅度大的重录可能需要手动选择。
-- **媒体处理**使用 FFmpeg 解码。浏览器按保留的音频区间拼接波形，并在剪点加 3 毫秒短淡化。剪后试听与导出读取相同的音频缓冲区。导入的录音导出为 44.1 kHz、16 位双声道 WAV。[FFmpeg](https://ffmpeg.org/)
-- 项目中的逐字稿编辑界面、重录比较、选留、撤销、波形剪辑与字幕重算由 Codex 根据创作者提出的口播工作流辅助实现。演示音频使用 Windows 中文合成语音生成，示例逐字稿来自对这段音频的本地 Whisper 转录。
+The bundled demo opens even before the Whisper model is installed.
 
-## 演示
+## How to try it
 
-使用首页示例，先听「今天我想聊聊」的两遍录音，保留较完整的一遍。再处理「我，我，我」，保留「非常，非常重要」的强调。播放剪点，导出成片和字幕，即可演示同一段原声在剪辑前后的变化。
+The home page loads a 22-second synthetic Chinese voice-over with two retakes and a stutter.
+
+1. In **重录与卡词** (Retakes & stutters), play take 1 and take 2 of "今天我想聊聊", then click **只留这遍** (Keep this take) on the more complete one.
+2. For "我，我，我", click **剪掉前面的重复** (Cut the repeats). For "非常，非常重要", click **全部保留** (Keep all), since that repetition is intentional emphasis.
+3. Click **试听剪点** (Audition cut) to hear both sides of the last cut, or press `/`.
+4. Place the playhead at a cut, open **气口** (Pauses), choose 0.4 s and click **插入气口** (Insert pause). Click the purple marker to resize or loop it.
+5. Press **Space** to play: the playhead jumps over the red cut ranges and the clock keeps counting through the pause.
+6. Click **导出 WAV** and **导出字幕** to download the edited audio and its SRT.
+
+To try your own recording, click **＋ 导入录音** (Import) or drag a WAV/MP3/M4A file onto the page (up to 15 minutes and 128 MiB).
+
+### Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| Space | Play / pause |
+| ← / → | Pause and nudge the playhead by 0.05 s |
+| I / O | Mark in / out at the playhead |
+| Ctrl+B | Split at the playhead |
+| Shift+Backspace or Shift+Delete | Cut the selection and close the gap |
+| / | Audition the most recent cut |
+| Esc | Clear the selection |
+| Ctrl+Z | Undo |
+
+## Your contribution
+
+I was responsible for the requirements, the workflow design, and testing. I defined the problem from my own voice-over work, decided how reviewing retakes, cutting, pauses, and export should fit together, chose which editing conventions to borrow from DaVinci Resolve, and tested each version on real recordings, reporting bugs and UX problems back.
+
+Most of the code was generated by AI coding assistants: **OpenAI Codex** and **Anthropic Claude** (Claude Code). They wrote the Python server, the browser editor, the heuristic suggestion rules, and the export logic from my specifications and feedback.
+
+## Credits
+
+- [Whisper](https://github.com/openai/whisper) and [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for speech recognition.
+- [FFmpeg](https://ffmpeg.org/) for decoding.
+- The in/out and ripple-delete shortcuts follow the [DaVinci Resolve Beginner's Guide](https://documents.blackmagicdesign.com/UserManuals/DaVinci-Resolve-17-Beginners-Guide.pdf).
+- The demo audio was generated with a Windows Chinese text-to-speech voice; its transcript comes from running local Whisper on that audio.

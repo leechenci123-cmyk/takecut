@@ -15,14 +15,15 @@ const action = (label, fn) => {
 };
 let original, edited, words = [], lines = [], suggestions = [], cuts = [], history = [], hidden = [];
 let job = "", title = "", busy = false, lo = null, hi = null, cursor = 0, zoom = 1, viewStart = 0;
-let splits = [];
+let splits = [], pauses = [], selectedPause = null;
+let audioPlan = [], outputFrames = 0, resumeAt = null;
 const hasRange = () => lo !== null && hi !== null && hi > lo;
 let player = null, mode = "", since = 0, seekStart = 0, seekEnd = 0, frame = 0, lastWord = -1;
 let drag = null, peaks = [], lastJoin = null;
 const status = text => { $("status").textContent = text; };
 const total = () => original?.duration || 0;
 const cutSeconds = () => cuts.reduce((sum, [a,b]) => sum + b - a, 0);
-const remaining = () => Math.max(0, total() - cutSeconds());
+const remaining = () => original ? outputFrames/original.sampleRate : 0;
 const normalized = s => s.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
 function joinCuts(ranges) {
   const merged = [];
@@ -43,8 +44,41 @@ function keepRanges() {
   return keep;
 }
 const removedBefore = t => cuts.reduce((v,[a,b]) => v + Math.max(0, Math.min(t,b)-a), 0);
-const mapped = t => t - removedBefore(t);
 const isCut = w => removedBefore(w.end)-removedBefore(w.start) >= (w.end-w.start)/2;
+function rebuildAudioPlan() {
+  const sr=original.sampleRate;
+  const frame=t=>Math.round(t*sr);
+  const ranges=keepRanges().map(([a,b])=>[frame(a),frame(b)]);
+  const gaps=pauses.map(pause=>({pause,a:frame(pause.at),b:frame(pause.at),length:frame(pause.duration)}));
+  const clips=[];
+  let gapIndex=0;
+  for(const [start,end] of ranges) {
+    let a=start;
+    while(gapIndex<gaps.length && gaps[gapIndex].a<=start) gapIndex++;
+    while(gapIndex<gaps.length && gaps[gapIndex].a<end) {
+      const b=gaps[gapIndex++].a;
+      if(b>a) clips.push({a,b,length:b-a});
+      a=b;
+    }
+    if(end>a) clips.push({a,b:end,length:end-a});
+  }
+  audioPlan=[...clips,...gaps].sort((x,y)=>x.a-y.a||x.b-y.b);
+  outputFrames=0;
+  for(const clip of audioPlan) {
+    clip.offset=outputFrames;
+    outputFrames+=clip.length;
+  }
+  edited=null;
+  resumeAt=null;
+}
+function mapped(t, afterPause=false) {
+  const sr=original.sampleRate, frame=Math.round(t*sr);
+  for(const clip of audioPlan) {
+    if(frame<clip.a || (clip.pause && frame===clip.a && !afterPause)) return clip.offset/sr;
+    if(frame<clip.b) return (clip.offset+frame-clip.a)/sr;
+  }
+  return remaining();
+}
 function splitLines() {
   lines = [];
   let line;
@@ -87,14 +121,25 @@ function findSuggestions() {
   }
 }
 function save() {
-  try {localStorage.setItem("takecut-session", JSON.stringify({job,title,cuts,hidden,splits}));} catch {}
+  try {localStorage.setItem("takecut-session", JSON.stringify({job,title,cuts,hidden,splits,pauses}));} catch {}
 }
-function apply(ranges, key) {
+function rememberEdit() {
+  history.push({cuts,hidden,splits,pauses,selectedPause,lo,hi,lastJoin});
+}
+function apply(ranges, key, replacementPause) {
   const next=joinCuts(cuts.concat(ranges));
   if (total()-next.reduce((s,[a,b])=>s+b-a,0)<0.02) {status("至少保留一小段声音才能导出。"); return;}
-  stop(); history.push({cuts,hidden,splits,lo,hi,lastJoin});
-  cuts=next; hidden=key===undefined?hidden:hidden.concat(key); edited=null;
-  if(ranges.length) lastJoin=mapped(ranges[0][0]);
+  stop(); rememberEdit();
+  cuts=next; hidden=key===undefined?hidden:hidden.concat(key);
+  const f=t=>Math.round(t*original.sampleRate);
+  pauses=pauses.filter(p=>!cuts.some(([a,b])=>f(a)<f(p.at)&&f(p.at)<f(b)));
+  if(replacementPause) {
+    // Anchor against the merged cuts, so a selection that overlaps an existing cut puts the pause at the merged cut's end.
+    setPauseAt({at:pauseAnchor(replacementPause.end),duration:replacementPause.duration});
+    setPauseFields(replacementPause.duration);
+  }
+  rebuildAudioPlan();
+  if(ranges.length) lastJoin=ranges[0][0];
   lo=hi=null; save(); render(); status("已更新剪辑，可试听剪后或撤销。");
 }
 function keepTake(group, pick, key) {
@@ -115,11 +160,11 @@ function renderReviews() {
     if(s.group) {
       s.group.forEach((line,i)=>{
         const take=node("div","take",""); take.append(node("p","",line.text),
-          action("▶ 第 "+(i+1)+" 遍",()=>play("original",Math.max(0,line.start-.06),Math.min(total(),line.end+.12))),
+          action("▶ 第 "+(i+1)+" 遍",()=>play("timeline",Math.max(0,line.start-.06),Math.min(total(),line.end+.12))),
           action("只留这遍",()=>keepTake(s.group,i,k))); card.append(take);
       });
     } else {
-      card.append(node("p","",s.text),action("▶ 回听",()=>play("original",Math.max(0,s.a-.3),Math.min(total(),s.end+.65))),
+      card.append(node("p","",s.text),action("▶ 回听",()=>play("timeline",Math.max(0,s.a-.3),Math.min(total(),s.end+.65))),
         action("剪掉前面的重复",()=>apply([[s.a,s.b]],k)));
     }
     card.append(action("全部保留",()=>apply([],k))); box.append(card);
@@ -130,7 +175,7 @@ function renderReviews() {
 function render() {
   const box=$("rows"); const scroll=box.scrollTop; box.replaceChildren();
   lines.forEach(line=>{
-    const row=node("div","row",""); const t=action(stamp(line.start),()=>play("original",line.start,line.end));
+    const row=node("div","row",""); const t=action(stamp(line.start),()=>play("timeline",line.start,line.end));
     t.className="time"; t.title="试听整句"; row.append(t);
     const group=node("div","words","");
     line.ids.forEach(i=>{
@@ -143,8 +188,8 @@ function render() {
   $("lineCount").textContent=lines.length+" 句"; $("duration").textContent=stamp(total());
   $("removed").textContent=cutSeconds().toFixed(1)+" 秒"; $("resultTime").textContent=stamp(remaining());
   $("undo").disabled=!history.length||busy; $("wav").disabled=$("play").disabled=$("preview").disabled=!original||busy;
-  $("srt").disabled=busy||!words.some(w=>!isCut(w)); $("join").hidden=lastJoin===null||!cuts.length;
-  renderReviews(); updateSelection();
+  $("srt").disabled=busy||!words.some(w=>!isCut(w)); $("join").hidden=lastJoin===null;
+  renderReviews(); renderPauses(); updateSelection();
 }
 function updateSelection(writeFields=true) {
   if(writeFields) {
@@ -155,6 +200,7 @@ function updateSelection(writeFields=true) {
   $("cut").disabled=$("listenSel").disabled=!valid||unavailable;
   $("split").disabled=$("markIn").disabled=$("markOut").disabled=unavailable;
   $("clearMarks").disabled=unavailable||(lo===null&&hi===null);
+  $("replacePause").disabled=unavailable||!valid;
   $("rangeTime").textContent=valid?"已选 "+seconds(hi-lo)+" 秒":lo!==null?"等待出点":hi!==null?"等待入点":"";
   document.querySelectorAll(".word").forEach(el=>{
     const w=words[+el.dataset.i]; el.classList.toggle("selected",valid && w.end>lo+.00001 && w.start<hi-.00001);
@@ -168,7 +214,7 @@ for(const id of ["start","end"]) $(id).oninput=()=>{
 $("clearMarks").onclick=()=>{lo=hi=null;updateSelection();};
 function headTime() {
   if(!player) return cursor;
-  return mode==="edited"?sourceTime(position()):position();
+  return sourceTime(position());
 }
 function mark(inPoint) {
   const t=headTime();
@@ -183,14 +229,20 @@ $("split").onclick=()=>{
   if(!keepRanges().some(([a,b])=>t>a+edge&&t<b-edge)||splits.some(s=>Math.abs(s-t)<edge)) {
     status("请把播放头移到保留片段的中间再分割。");return;
   }
-  history.push({cuts,hidden,splits,lo,hi,lastJoin});
+  rememberEdit();
   splits=[...splits,t].sort((a,b)=>a-b);
   lo=hi=null;save();render();status("已在 "+seconds(t)+" 秒处分割。双击波形可选中一段。");
 };
 $("cut").onclick=()=>apply([[lo,hi]]);
-$("listenSel").onclick=()=>play("original",lo,hi);
+$("listenSel").onclick=()=>play("timeline",lo,hi);
 $("undo").onclick=()=>{
-  if(!history.length) return; stop(); ({cuts,hidden,splits,lo,hi,lastJoin}=history.pop()); edited=null; save(); render(); status("已撤销上一步。");
+  if(!history.length) return;
+  stop();
+  ({cuts,hidden,splits,pauses,selectedPause,lo,hi,lastJoin}=history.pop());
+  rebuildAudioPlan();
+  const pause=currentPause();
+  if(pause) setPauseFields(pause.duration);
+  save(); render(); status("已撤销上一步。");
 };
 $("rows").onpointerup=e=>{
   const sel=window.getSelection();
@@ -202,56 +254,169 @@ $("rows").onpointerup=e=>{
   }
   const el=wordAt(e.target); if(!el) return;
   const w=words[+el.dataset.i]; setSelection(w.start,w.end);
-  play("original",w.start,Math.min(total(),w.end+.45));
+  play("timeline",w.start,Math.min(total(),w.end+.45));
+};
+function setPauseAt(pause) {
+  pauses=[...pauses.filter(p=>p.at!==pause.at),pause].sort((a,b)=>a.at-b.at);
+  selectedPause=pause.at;
+}
+function renderPauses() {
+  const list=$("pauseList");
+  list.replaceChildren();
+  list.hidden=!pauses.length;
+  for(const pause of pauses) {
+    const button=action(stamp(pause.at)+" · "+seconds(pause.duration)+" 秒",()=>selectPause(pause));
+    button.setAttribute("aria-pressed",String(pause.at===selectedPause));
+    button.disabled=busy;
+    list.append(button);
+  }
+  $("pauseActions").hidden=!pauses.some(p=>p.at===selectedPause);
+  $("insertPause").disabled=busy||!original;
+}
+function setPauseFields(duration) {
+  $("pauseLength").value=seconds(duration);
+  $("pauseSlider").max=Math.max(2,Math.ceil(duration));
+  $("pauseSlider").value=duration;
+}
+function selectPause(pause) {
+  stop();
+  resumeAt=mapped(pause.at);
+  selectedPause=cursor=pause.at;
+  $("pauseEditor").open=true;
+  setPauseFields(pause.duration);
+  renderPauses();
+  draw();
+}
+function pauseLength(allowZero=false) {
+  const input=$("pauseLength"), duration=input.valueAsNumber;
+  if(Number.isFinite(duration)&&duration>=(allowZero?0:.01)&&duration<=60) return duration;
+  status("请输入 "+(allowZero?"0":"0.01")+" 到 60 秒之间的时长。");
+  return null;
+}
+function pauseAnchor(time) {
+  const sr=original.sampleRate;
+  const cut=cuts.find(([a,b])=>a<=time&&time<b);
+  return Math.round((cut?.[1]??time)*sr)/sr;
+}
+function updatePause(pause, duration) {
+  if(duration===null || pause?.duration===duration) return;
+  stop();
+  rememberEdit();
+  const at=pause?.at??pauseAnchor(cursor);
+  if(duration>0) {
+    setPauseAt({at,duration});
+    setPauseFields(duration);
+  } else {
+    pauses=pauses.filter(p=>p.at!==at);
+    selectedPause=null;
+  }
+  cursor=at;
+  lastJoin=at;
+  rebuildAudioPlan();
+  resumeAt=mapped(at);
+  save();
+  render();
+  status(duration>0?"气口已设为 "+seconds(duration)+" 秒。":"已删除气口。");
+}
+for(const button of document.querySelectorAll("[data-pause-length]")) {
+  button.onclick=()=>setPauseFields(Number(button.dataset.pauseLength));
+}
+$("insertPause").onclick=()=>{
+  const duration=pauseLength();
+  if(duration===null) return;
+  const at=pauseAnchor(headTime());
+  updatePause(pauses.find(p=>p.at===at)??{at},duration);
+};
+$("replacePause").onclick=()=>{
+  const duration=pauseLength(true);
+  if(duration===null) return;
+  apply([[lo,hi]],undefined,duration>0?{end:hi,duration}:undefined);
+};
+const currentPause=()=>pauses.find(p=>p.at===selectedPause);
+$("resizePause").onclick=()=>updatePause(currentPause(),pauseLength());
+$("deletePause").onclick=()=>updatePause(currentPause(),0);
+$("pauseSlider").oninput=()=>{$("pauseLength").value=seconds($("pauseSlider").valueAsNumber);};
+$("pauseSlider").onchange=()=>updatePause(currentPause(),$("pauseSlider").valueAsNumber);
+$("reviewPause").onclick=()=>{
+  if(mode==="pause"){stop();draw();return;}
+  const pause=currentPause();
+  const start=mapped(pause.at), end=mapped(pause.at,true);
+  play("pause",Math.max(0,start-1),Math.min(remaining(),end+1));
 };
 function buildEdited() {
   if(edited) return edited;
-  if(!cuts.length) return original;
-  const sr=original.sampleRate, spans=keepRanges().map(([a,b])=>[Math.round(a*sr),Math.min(original.length,Math.round(b*sr))]).filter(([a,b])=>b>a);
-  const size=spans.reduce((s,[a,b])=>s+b-a,0);
-  const out=ctx.createBuffer(original.numberOfChannels,size,sr);
+  if(!cuts.length&&!pauses.length) return original;
+  const sr=original.sampleRate;
+  const out=ctx.createBuffer(original.numberOfChannels,outputFrames,sr);
   for(let ch=0;ch<out.numberOfChannels;ch++) {
-    const src=original.getChannelData(ch), dst=out.getChannelData(ch); let pos=0;
-    for(const [a,b] of spans) {
-      const len=b-a, fade=Math.min(Math.floor(len/2),Math.round(sr*.003));
+    const src=original.getChannelData(ch), dst=out.getChannelData(ch);
+    for(const {a,b,length:len,offset:pos,pause} of audioPlan) {
+      if(pause) continue;
+      const fade=Math.min(Math.floor(len/2),Math.round(sr*.003));
       dst.set(src.subarray(a,b),pos);
       for(let j=0;j<fade;j++) {
-        if(a>0) dst[pos+j]*=j/fade;
-        if(b<original.length) dst[pos+len-1-j]*=j/fade;
+        if(a>0||pos>0) dst[pos+j]*=j/fade;
+        if(b<original.length||pos+len<outputFrames) dst[pos+len-1-j]*=j/fade;
       }
-      pos+=len;
     }
   }
   edited=out; return out;
 }
-function position() {return Math.min(seekEnd,seekStart+Math.max(0,ctx.currentTime-since));}
+function position() {
+  const elapsed=Math.max(0,ctx.currentTime-since);
+  return mode==="pause"?seekStart+elapsed%(seekEnd-seekStart):Math.min(seekEnd,seekStart+elapsed);
+}
 function sourceTime(t) {
-  for(const [a,b] of keepRanges()) {if(t<b-a) return a+t; t-=b-a;} return total();
+  const sr=original.sampleRate, frame=Math.round(t*sr);
+  for(const clip of audioPlan) {
+    if(frame<clip.offset+clip.length) return (clip.a+(clip.pause?0:Math.max(0,t*sr-clip.offset)))/sr;
+  }
+  return total();
 }
 function stop() {
   if(player) {
-    const pos=position(); cursor=mode==="edited"?sourceTime(pos):pos;
+    cursor=headTime();
+    resumeAt=position();
     player.onended=null; player.stop(); player=null;
   }
-  cancelAnimationFrame(frame); $("play").textContent="▶ 播放原声"; $("preview").textContent="试听剪后"; mode="";
+  cancelAnimationFrame(frame); $("play").textContent="▶ 播放"; $("preview").textContent="试听剪后"; $("join").textContent="试听剪点"; $("reviewPause").textContent="循环试听"; mode="";
 }
 async function play(type,a,b) {
   if(!original || busy) return;
   stop(); await ctx.resume(); stop();
-  const buf=type==="edited"?buildEdited():original;
+  const buf=buildEdited();
+  if(type==="timeline"){
+    a=mapped(a); b=mapped(b,b===total());
+  }
   a=Math.max(0,Math.min(buf.duration,a)); b=Math.min(b,buf.duration);
-  if(b<=a) return;
+  if(Math.round(b*buf.sampleRate)<=Math.round(a*buf.sampleRate)){
+    cursor=sourceTime(a);draw();return;
+  }
   mode=type; seekStart=a;seekEnd=b;since=ctx.currentTime;
+  resumeAt=null;
   player=ctx.createBufferSource();player.buffer=buf;player.connect(ctx.destination);
-  player.onended=()=>{cursor=type==="edited"?sourceTime(b):b;player=null;stop();draw();};
-  player.start(0,a,b-a);
-  $(type==="edited"?"preview":"play").textContent="Ⅱ 暂停";
-  function tick(){if(!player) return; const t=position(); cursor=type==="edited"?sourceTime(t):t; draw(); frame=requestAnimationFrame(tick);}
+  player.onended=()=>{cursor=sourceTime(b);player=null;stop();draw();};
+  if(type==="pause") {
+    player.loop=true;player.loopStart=a;player.loopEnd=b;
+    player.start(0,a);
+  } else {
+    player.start(0,a,b-a);
+  }
+  $({pause:"reviewPause",edited:"preview",join:"join"}[type]??"play").textContent="Ⅱ 暂停";
+  function tick(){if(!player) return; cursor=headTime(); draw(); frame=requestAnimationFrame(tick);}
   tick();
 }
-$("play").onclick=()=>{if(mode==="original"){stop();draw();}else play("original",cursor>=total()-.05?0:cursor,total());};
+$("play").onclick=()=>{
+  if(player){stop();draw();return;}
+  const start=resumeAt??(cursor>=total()?0:mapped(cursor));
+  play("transport",start,remaining());
+};
 $("preview").onclick=()=>{if(mode==="edited"){stop();draw();}else play("edited",0,remaining());};
-$("join").onclick=()=>play("edited",Math.max(0,lastJoin-1.5),Math.min(remaining(),lastJoin+2));
+$("join").onclick=()=>{
+  if(mode==="join"){stop();draw();return;}
+  const join=mapped(lastJoin), end=mapped(lastJoin,true);
+  play("join",Math.max(0,join-1.5),Math.min(remaining(),end+2));
+};
 function buildPeaks() {
   const data=original.getChannelData(0), step=128;
   peaks=new Float32Array(Math.ceil(data.length/step));
@@ -275,6 +440,12 @@ function draw() {
   for(const [a,b] of cuts){g.fillStyle="rgba(210,110,90,.5)";g.fillRect(x(a),0,x(b)-x(a),h);}
   if(hasRange()){g.fillStyle="rgba(251,194,83,.38)";g.fillRect(x(lo),0,x(hi)-x(lo),h);}
   for(const t of splits){g.fillStyle="#68c6e0";g.fillRect(x(t)-ratio,0,2*ratio,h);g.fillRect(x(t)-3*ratio,0,6*ratio,5*ratio);}
+  for(const pause of pauses) {
+    const px=x(pause.at);
+    g.fillStyle=pause.at===selectedPause?"#f1ccff":"#cb9fe9";
+    g.fillRect(px-ratio,0,2*ratio,h);
+    g.fillRect(px-5*ratio,0,10*ratio,8*ratio);
+  }
   for(const [t,label] of [[lo,"I"],[hi,"O"]]) {
     if(t===null)continue;
     const px=x(t);g.fillStyle="#f8cb73";g.fillRect(px,0,ratio,h);
@@ -283,12 +454,14 @@ function draw() {
   }
   g.fillStyle="#f9efcf";g.fillRect(x(cursor),0,2*ratio,h);
   $("leftTick").textContent=stamp(viewStart);$("midTick").textContent=stamp(viewStart+span/2);$("rightTick").textContent=stamp(viewStart+span);
-  const hundredths=Math.round((mode==="edited"?position():cursor)*100);
+  // The clock follows the edited timeline (what playback actually plays), so it keeps running through pauses.
+  const hundredths=Math.round((player?position():resumeAt??mapped(cursor))*100);
   $("clock").textContent=String(Math.floor(hundredths/6000)).padStart(2,"0")+":"+(hundredths%6000/100).toFixed(2).padStart(5,"0");
-  $("duration").textContent=stamp(mode==="edited"?remaining():total());
+  $("duration").textContent=stamp(remaining());
   let low=0,high=words.length;
   while(low<high){const mid=(low+high)>>1;if(words[mid].end<=cursor)low=mid+1;else high=mid;}
-  const active=words[low]?.start<=cursor?low:-1;
+  const active=words[low]?.start<=cursor &&
+    !(player&&audioPlan.some(clip=>clip.pause&&cursor===clip.pause.at))?low:-1;
   if(active!==lastWord){document.querySelector(".word.active")?.classList.remove("active");document.querySelector('.word[data-i="'+active+'"]')?.classList.add("active");lastWord=active;}
 }
 function setZoom(factor){if(!original)return;zoom=Math.max(1,Math.min(64,zoom*factor));const span=total()/zoom;
@@ -296,9 +469,21 @@ function setZoom(factor){if(!original)return;zoom=Math.max(1,Math.min(64,zoom*fa
 $("zoomIn").onclick=()=>setZoom(2);$("zoomOut").onclick=()=>setZoom(.5);
 const wave=$("wave");
 function wavePos(e){const r=wave.getBoundingClientRect();return Math.max(0,Math.min(total(),viewStart+Math.min(1,Math.max(0,(e.clientX-r.left)/r.width))*total()/zoom));}
-wave.onpointerdown=e=>{if(!original||busy)return;stop();drag={x:e.clientX,t:wavePos(e)};wave.setPointerCapture(e.pointerId);};
+wave.onpointerdown=e=>{if(!original||busy)return;stop();resumeAt=null;drag={x:e.clientX,t:wavePos(e)};wave.setPointerCapture(e.pointerId);};
 wave.onpointermove=e=>{if(drag && Math.abs(e.clientX-drag.x)>2){lo=Math.min(drag.t,wavePos(e));hi=Math.max(drag.t,wavePos(e));draw();}};
-wave.onpointerup=e=>{if(!drag)return;const t=wavePos(e);if(Math.abs(e.clientX-drag.x)<3){cursor=t;}else{lo=Math.min(t,drag.t);hi=Math.max(t,drag.t);cursor=lo;}drag=null;updateSelection();};
+wave.onpointerup=e=>{
+  if(!drag)return;
+  const t=wavePos(e),clicked=Math.abs(e.clientX-drag.x)<3;
+  if(clicked) cursor=t;
+  else {lo=Math.min(t,drag.t);hi=Math.max(t,drag.t);cursor=lo;}
+  drag=null;
+  if(clicked) {
+    const tolerance=7*total()/zoom/wave.getBoundingClientRect().width;
+    const nearest=pauses.reduce((closest,p)=>Math.abs(p.at-t)<Math.abs((closest?.at??Infinity)-t)?p:closest,null);
+    if(nearest&&Math.abs(nearest.at-t)<=tolerance) selectPause(nearest);
+  }
+  updateSelection();
+};
 wave.ondblclick=e=>{
   if(!original||busy)return;
   const t=wavePos(e), range=keepRanges().find(([a,b])=>a<=t&&t<b);
@@ -326,15 +511,30 @@ $("wav").onclick=()=>{
 function srtTime(sec){let ms=Math.round(sec*1000);return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(x=>String(x).padStart(2,"0")).join(":")+","+String(ms%1000).padStart(3,"0");}
 $("srt").onclick=()=>{
   const cues=[];
+  const addCue=tokens=>{
+    if(!tokens.length)return;
+    const start=mapped(tokens[0].start,true), end=mapped(tokens.at(-1).end);
+    if(srtTime(start)===srtTime(end)) return;
+    cues.push((cues.length+1)+"\r\n"+srtTime(start)+" --> "+srtTime(end)+"\r\n"+tokens.map(w=>w.text).join("").trim());
+  };
   for(const line of lines) {
-    const kept=line.ids.map(i=>words[i]).filter(w=>!isCut(w)); if(!kept.length)continue;
-    cues.push((cues.length+1)+"\r\n"+srtTime(mapped(kept[0].start))+" --> "+srtTime(mapped(kept.at(-1).end))+"\r\n"+kept.map(w=>w.text).join("").trim());
+    let tokens=[];
+    for(const i of line.ids) {
+      const w=words[i], prev=tokens.at(-1);
+      if(isCut(w))continue;
+      if(prev&&pauses.some(p=>p.at>prev.start&&p.at<=w.start)) {
+        addCue(tokens);
+        tokens=[];
+      }
+      tokens.push(w);
+    }
+    addCue(tokens);
   }
   download(new Blob(["\uFEFF"+cues.join("\r\n\r\n")+"\r\n"],{type:"application/x-subrip;charset=utf-8"}),"srt");
 };
 function busyState(value){busy=value;$("import").disabled=$("demo").disabled=value;
   for(const id of ["play","preview","wav","srt","undo","cut","listenSel","markIn","markOut","split","clearMarks"])$(id).disabled=true;
-  for(const el of [$("reviews"),$("rows"),$("start"),$("end")])el.inert=value;
+  for(const el of [$("reviews"),$("rows"),$("start"),$("end"),$("pauseEditor")])el.inert=value;
   if(!value) render();
 }
 async function load(id,label,saved) {
@@ -344,6 +544,10 @@ async function load(id,label,saved) {
   stop();original=buf;words=tokens;edited=null;lastJoin=null;job=id;title=label;cursor=viewStart=0;lo=hi=null;zoom=1;history=[];
   splits=(saved?.splits||[]).filter(t=>Number.isFinite(t)&&t>0&&t<total());
   cuts=joinCuts(saved?.cuts||[]);hidden=saved?.hidden||[];lastWord=-1;
+  pauses=(saved?.pauses||[]).filter(p=>Number.isFinite(p.at)&&p.at>=0&&p.at<=total()&&
+    Number.isFinite(p.duration)&&p.duration>=.01&&p.duration<=60).sort((a,b)=>a.at-b.at);
+  selectedPause=null;
+  rebuildAudioPlan();
   $("name").textContent=title;$("kind").textContent=id==="demo"?"示例录音 · 合成人声":"我的录音";$("scale").textContent="全段";
   splitLines();findSuggestions();buildPeaks();save();
   status("Whisper 转录 · "+stamp(total())+" · 拖入文件可切换录音");render();
@@ -385,7 +589,7 @@ window.addEventListener("keydown",e=>{
   if(modifier||e.shiftKey)return;
   if(e.code==="Space"){e.preventDefault();if(e.repeat)return;if(player){stop();draw();}else $("play").click();}
   if(e.code==="ArrowLeft"||e.code==="ArrowRight"){
-    e.preventDefault();stop();cursor=Math.min(total(),Math.max(0,cursor+(e.code==="ArrowLeft"?-.05:.05)));draw();
+    e.preventDefault();stop();resumeAt=null;cursor=Math.min(total(),Math.max(0,cursor+(e.code==="ArrowLeft"?-.05:.05)));draw();
   }
 });
 openDemo(true);

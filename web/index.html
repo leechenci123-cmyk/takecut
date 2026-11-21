@@ -8,7 +8,7 @@
 <div class="deck-head"><div class="track-name"><span class="lamp"></span>原声波形</div><div class="zoom"><button id="zoomOut" aria-label="缩小波形">−</button><span id="scale">全段</span><button id="zoomIn" aria-label="放大波形">＋</button></div></div>
 <canvas id="wave" aria-label="点击原声波形定位，拖动选取要剪的范围"></canvas>
 <div class="ruler"><span id="leftTick">00:00</span><span id="midTick"></span><span id="rightTick"></span></div>
-<div class="transport"><button id="play" class="play" disabled>▶ 播放原声</button><button id="preview" disabled>试听剪后</button><button id="join" hidden>试听剪点</button><span id="clock">00:00.0</span><span class="total"> / <span id="duration">00:00.0</span></span></div>
+<div class="transport"><button id="play" class="play" title="从播放头开始，自动跳过红色删段" disabled>▶ 播放</button><button id="preview" disabled>试听剪后</button><button id="join" hidden>试听剪点</button><span id="clock">00:00.0</span><span class="total"> / <span id="duration">00:00.0</span></span></div>
 <section class="manual" aria-labelledby="manualTitle">
 <h2 id="manualTitle">手动剪辑</h2>
 <div class="manual-tools">
@@ -20,6 +20,25 @@
 </div>
 <div class="bounds"><label>入点 <input id="start" type="number" min="0" step="0.01" placeholder="—" aria-label="入点秒数"></label><label>出点 <input id="end" type="number" min="0" step="0.01" placeholder="—" aria-label="出点秒数"></label><span id="rangeTime"></span></div>
 <p>单击波形定位，双击选中分割后的一段。← → 微调 0.05 秒，空格播放或暂停。</p>
+<details id="pauseEditor" class="pause-editor">
+<summary>气口</summary>
+<div class="pause-tools">
+<button type="button" data-pause-length="0.2">0.2 秒</button>
+<button type="button" data-pause-length="0.4">0.4 秒</button>
+<button type="button" data-pause-length="0.8">0.8 秒</button>
+<label>时长（秒） <input id="pauseLength" type="number" min="0" max="60" step="0.01" value="0.40"></label>
+<button id="insertPause" class="cut-btn">插入气口</button>
+<button id="replacePause" title="用指定时长的静音替换选区">调整原有停顿</button>
+</div>
+<div id="pauseList" class="pause-tools" aria-label="已插入的气口" hidden></div>
+<div id="pauseActions" class="pause-tools" hidden>
+<label class="pause-slider">调整长度 <input id="pauseSlider" type="range" min="0.01" max="2" step="0.01" aria-label="拖动调整气口长度"></label>
+<button id="resizePause">应用时长</button>
+<button id="reviewPause">循环试听</button>
+<button id="deletePause">删除气口</button>
+</div>
+<p>在播放头处插入静音。波形上的紫色标记可选中气口。调整原有停顿时，请先框选停顿范围。</p>
+</details>
 </section>
 </section>
 <div class="grid"><section class="panel"><div class="panel-title"><div><h2>逐字稿</h2></div><span id="lineCount" class="count"></span></div>
