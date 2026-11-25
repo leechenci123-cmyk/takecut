@@ -45,5 +45,5 @@ export function prefButtons({ onHelp } = {}) {
 export function logo() {
   const mark = h("span", { class: "logo-mark" });
   mark.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="#c7f67a"><rect x="5" y="13" width="2.6" height="6" rx="1.3"/><rect x="9.8" y="9" width="2.6" height="14" rx="1.3"/><rect x="14.7" y="5.5" width="2.6" height="21" rx="1.3"/><rect x="19.6" y="10" width="2.6" height="12" rx="1.3"/><rect x="24.4" y="13.5" width="2.6" height="5" rx="1.3"/></g></svg>';
-  return h("a", { class: "logo", href: "#/" }, mark, h("span", null, t("app.name")), h("small", null, "TAKECUT"));
+  return h("a", { class: "logo", href: "#/" }, mark, h("span", null, t("app.name")), h("small", null, getLang() === "zh" ? "TAKECUT" : "复听"));
 }

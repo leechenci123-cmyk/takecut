@@ -1,6 +1,6 @@
 // Entry point: theme, router (#/ = projects, #/p/<id> = editor) and drag-and-drop import.
 
-import { t, onLang } from "./i18n.js";
+import { t, getLang, onLang } from "./i18n.js";
 import { onTheme } from "./ui/prefs.js";
 import { mountHome, importFile } from "./ui/home.js";
 import { mountEditor } from "./ui/editor.js";
@@ -13,7 +13,7 @@ function route() {
   view?.destroy?.();
   app.replaceChildren();
   const match = /^#\/p\/([0-9a-f]{32})$/.exec(location.hash);
-  document.title = `${t("app.name")} · Takecut`;
+  document.title = getLang() === "zh" ? "复听 · Takecut" : "Takecut · 复听";
   view = match ? mountEditor(app, match[1]) : mountHome(app);
 }
 

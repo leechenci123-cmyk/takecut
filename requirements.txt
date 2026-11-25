@@ -1,1 +1,4 @@
 faster-whisper==1.2.1
+# Optional:
+#   opencc                                   Simplified <-> Traditional subtitles
+#   nvidia-cublas-cu12 nvidia-cudnn-cu12     GPU transcription on Windows (NVIDIA, CUDA 12)

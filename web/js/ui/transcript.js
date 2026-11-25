@@ -244,6 +244,7 @@ export function createTranscript(S, scroll) {
       else hi = mid;
     }
     const i = lo < words.length && words[lo].start <= at + 1e-4 ? lo : -1;
+    scroll.classList.toggle("is-playing", !!S.playing);
     if (i === active) return;
     wordEls[active]?.classList.remove("active");
     active = i;

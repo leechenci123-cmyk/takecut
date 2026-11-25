@@ -13,7 +13,7 @@ import { splitLines, lineIndex } from "../core/lines.js";
 import { scriptOf, normalize } from "../core/text.js";
 import { staticSuggestions, pauseSuggestions, statusOf, rangesFor } from "../core/suggest/index.js";
 import { DEFAULT_THRESHOLD, DEFAULT_TARGET } from "../core/suggest/pauses.js";
-import { snapWordRange } from "../core/snap.js";
+import { snapWordRange, quietestPoint } from "../core/snap.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { toast } from "./overlay.js";
@@ -184,7 +184,9 @@ export function createSession(data, engine) {
   };
   S.insertPause = duration => {
     const existing = pauseAt(S.plan, S.playhead);
-    const at = existing ? existing.at : pauseAnchor(S.edits.cuts, toSource(S.plan, S.playhead), S.sampleRate);
+    // Land in the quietest spot near the playhead so a pause never splits a word.
+    const src = toSource(S.plan, S.playhead);
+    const at = existing ? existing.at : pauseAnchor(S.edits.cuts, quietestPoint(analysis, src, Math.max(0, src - 0.12), Math.min(S.duration, src + 0.12)), S.sampleRate);
     S.setPause(at, duration);
     S.selectPause(at);
   };
