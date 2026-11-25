@@ -120,6 +120,8 @@ export default {
   "clean.stutters": "叠词口吃",
   "clean.fillers": "语气词",
   "clean.pauses": "长停顿",
+  "clean.applyAll": "全部按推荐清理（{n} 处）",
+  "clean.applyAllHint": "「可能」的语气词需要逐条确认。",
   "clean.applyRecommended": "全部按推荐",
   "clean.cutAll": "全部剪掉",
   "clean.cutStrong": "剪掉明确的 {n} 个",

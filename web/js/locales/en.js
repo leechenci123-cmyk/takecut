@@ -119,6 +119,8 @@ export default {
   "clean.stutters": "Stutters",
   "clean.fillers": "Filler words",
   "clean.pauses": "Long pauses",
+  "clean.applyAll": "Clean up all recommended ({n})",
+  "clean.applyAllHint": "“Maybe” filler words still need your review.",
   "clean.applyRecommended": "Apply recommended",
   "clean.cutAll": "Cut all",
   "clean.cutStrong": "Cut clear ones ({n})",

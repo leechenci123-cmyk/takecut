@@ -45,6 +45,9 @@ export function createCleanup(S, root) {
         h("strong", null, open.length ? t("clean.remaining", { n: open.length }) : t("clean.allDone"))),
       open.length ? meter : null,
       h("div", { class: "muted", style: { fontSize: "13px" } }, t("clean.summaryCut", { cut: secs(S.cutSeconds()), dur: short(S.plan.editedDuration) })),
+      S.recommended().length > 0 && h("div", { class: "row wrap" },
+        button(t("clean.applyAll", { n: S.recommended().length }), { icon: "sparkle", class: "primary small", onclick: () => S.applyAll() }),
+        h("span", { class: "faint", style: { fontSize: "12px" } }, t("clean.applyAllHint"))),
       h("div", { class: "faint", style: { fontSize: "12px" } }, t("clean.heuristic")));
   }
 

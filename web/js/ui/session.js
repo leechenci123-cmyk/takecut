@@ -6,7 +6,7 @@
 //   "focus"      a suggestion was focused                 "pause"      selected pause changed
 //   "prefs" / "view"
 
-import { buildPlan, toEdited, toSource, cutSeconds, isWordCut, pauseAnchor, pauseAt, renderList, removedBefore } from "../core/timeline.js";
+import { buildPlan, toEdited, toSource, cutSeconds, cutFlags, pauseAnchor, pauseAt, renderList, removedBefore } from "../core/timeline.js";
 import { applyCut, restoreRange, setPause, fixWord, ignoreSuggestion, unignoreSuggestion, normalizeEdits, addSplit, canSplit } from "../core/edits.js";
 import { createHistory } from "../core/history.js";
 import { splitLines, lineIndex } from "../core/lines.js";
@@ -47,6 +47,7 @@ export function createSession(data, engine) {
 
   function rebuild() {
     S.plan = buildPlan({ duration: S.duration, sampleRate: S.sampleRate, cuts: S.edits.cuts, pauses: S.edits.pauses });
+    S.cutWords = cutFlags(S.edits.cuts, words);
     S.pauseSugs = pauseSuggestions(words, S.edits, {
       duration: S.duration, threshold: S.prefs.threshold, target: S.prefs.target, silences: analysis?.silences ?? null,
     });
@@ -64,7 +65,7 @@ export function createSession(data, engine) {
     cached = { version: S.version, list };
     return list;
   };
-  S.isCut = i => isWordCut(S.edits.cuts, words[i]);
+  S.isCut = i => S.cutWords[i];
   S.cutSeconds = () => cutSeconds(S.edits.cuts);
 
   // ---- edits ------------------------------------------------------------------------------
@@ -253,6 +254,15 @@ export function createSession(data, engine) {
   S.applyCategory = category => {
     let list = S.suggestions().filter(x => x.status === "open" && x.s.category === category).map(x => x.s);
     if (category === "fillers") list = list.filter(s => s.strength === "strong");
+    if (!list.length) return;
+    S.cut(list.flatMap(s => rangesFor(s)), { message: sec => t("clean.appliedCount", { n: list.length, sec }) });
+  };
+  /** Everything the panel would recommend, as one undoable step. "Maybe" fillers are left for review. */
+  S.recommended = () => S.suggestions()
+    .filter(x => x.status === "open" && !(x.s.category === "fillers" && x.s.strength !== "strong"))
+    .map(x => x.s);
+  S.applyAll = () => {
+    const list = S.recommended();
     if (!list.length) return;
     S.cut(list.flatMap(s => rangesFor(s)), { message: sec => t("clean.appliedCount", { n: list.length, sec }) });
   };

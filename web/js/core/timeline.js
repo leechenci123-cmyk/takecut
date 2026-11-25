@@ -50,6 +50,20 @@ export const removedBefore = (cuts, t) => cuts.reduce((v, [a, b]) => v + Math.ma
 export const isWordCut = (cuts, w) => removedBefore(cuts, w.end) - removedBefore(cuts, w.start) >= (w.end - w.start) / 2;
 export const overlapsCut = (cuts, a, b) => cuts.some(([x, y]) => x < b && y > a);
 
+/** isWordCut for every word in one sweep, O(words + cuts). Words sorted by start, cuts merged. */
+export function cutFlags(cuts, words) {
+  const flags = new Array(words.length).fill(false);
+  let k = 0;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    while (k < cuts.length && cuts[k][1] <= w.start) k++;
+    let removed = 0;
+    for (let j = k; j < cuts.length && cuts[j][0] < w.end; j++) removed += Math.max(0, Math.min(w.end, cuts[j][1]) - Math.max(w.start, cuts[j][0]));
+    flags[i] = removed >= (w.end - w.start) / 2;
+  }
+  return flags;
+}
+
 /**
  * Where a pause lands for source time t: the end of the cut containing t, otherwise t itself.
  * Call it with the cuts *after* merging, so a pause never lands inside a cut.

@@ -117,3 +117,16 @@ test("cutting everything is refused; pauses inside new cuts are dropped", () => 
   near(cutSeconds(edits.cuts), 2);
   assert.equal(setPause(edits, 2, 0).pauses.length, 0);
 });
+
+test("cutFlags matches isWordCut for every word", async () => {
+  const { cutFlags } = await import("../../web/js/core/timeline.js");
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let round = 0; round < 20; round++) {
+    const words = [];
+    let t = 0;
+    for (let i = 0; i < 200; i++) { const d = 0.05 + rand() * 0.3; words.push({ start: t, end: t + d }); t += d + rand() * 0.4; }
+    const cuts = joinCuts(Array.from({ length: 40 }, () => { const a = rand() * t; return [a, a + rand() * 1.5]; }), t);
+    assert.deepEqual(cutFlags(cuts, words), words.map(w => isWordCut(cuts, w)));
+  }
+});

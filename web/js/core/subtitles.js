@@ -1,7 +1,7 @@
 // Subtitles that follow the edit: cut words disappear, times move to the edited timeline, cues
 // split at inserted pauses, and manual text fixes are used. SRT, WebVTT and plain text.
 
-import { isWordCut, toEdited } from "./timeline.js";
+import { cutFlags, toEdited } from "./timeline.js";
 import { wordText, joinWords, endsClause, endsSentence } from "./text.js";
 
 const pad = (n, w = 2) => String(n).padStart(w, "0");
@@ -50,6 +50,7 @@ function splitLong(ids, words, fixes, maxChars) {
  */
 export function buildCues(words, lines, edits, plan, { maxChars = 0, strip = false } = {}) {
   const cues = [];
+  const cut = cutFlags(edits.cuts, words);
   const add = ids => {
     for (const part of splitLong(ids, words, edits.fixes, maxChars)) {
       if (!part.length) continue;
@@ -65,7 +66,7 @@ export function buildCues(words, lines, edits, plan, { maxChars = 0, strip = fal
     let ids = [];
     for (const i of line.ids) {
       const w = words[i], prev = ids.length ? words[ids.at(-1)] : null;
-      if (isWordCut(edits.cuts, w)) continue;
+      if (cut[i]) continue;
       if (prev && edits.pauses.some(p => p.at > prev.start && p.at <= w.start)) {
         add(ids);
         ids = [];
@@ -82,8 +83,9 @@ export const toVTT = cues => "WEBVTT\n\n" + cues.map(c => `${vttTime(c.start)} -
 
 /** The kept transcript as plain text, one line per transcript line. */
 export function toTXT(words, lines, edits) {
+  const cut = cutFlags(edits.cuts, words);
   return lines
-    .map(line => joinWords(line.ids.filter(i => !isWordCut(edits.cuts, words[i])).map(i => wordText(words, edits.fixes, i))))
+    .map(line => joinWords(line.ids.filter(i => !cut[i]).map(i => wordText(words, edits.fixes, i))))
     .filter(Boolean)
     .join("\n") + "\n";
 }
