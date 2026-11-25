@@ -1,0 +1,10 @@
+{
+  "name": "takecut",
+  "private": true,
+  "description": "Dev scripts only. Takecut itself needs no npm install.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\"",
+    "test:py": "py -3 -m unittest discover -s tests/py -t ."
+  }
+}
