@@ -1,0 +1,109 @@
+/* Design tokens. Light is the default; dark comes from the system or the theme toggle. */
+:root {
+  --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Consolas, monospace;
+
+  --radius-s: 6px;
+  --radius: 9px;
+  --radius-l: 14px;
+  --radius-xl: 20px;
+
+  --bg: #f5f5f0;
+  --surface: #ffffff;
+  --surface-2: #f3f4ef;
+  --surface-3: #e9ebe4;
+  --border: #e3e5dd;
+  --border-strong: #cdd2c7;
+  --text: #17201b;
+  --text-2: #55605a;
+  --text-3: #8a938d;
+  --focus: #2f7d5a;
+
+  --brand: #16372e;
+  --brand-ink: #c7f67a;
+  --accent: #1f6b4e;
+  --accent-hover: #175a40;
+  --on-accent: #ffffff;
+  --accent-soft: #e2f1e8;
+  --accent-text: #19603f;
+
+  --cut: #d4483f;
+  --cut-soft: #fbe5e2;
+  --cut-wave: rgba(212, 72, 63, 0.22);
+  --select: #e9a425;
+  --select-soft: #fcefcf;
+  --pause: #7a5ad6;
+  --pause-soft: #eee8fc;
+  --retake: #2f74b5;
+  --retake-soft: #e3eef9;
+  --filler: #b86a0c;
+  --filler-soft: #fbeedb;
+  --stutter: #b4462b;
+  --stutter-soft: #f9e6df;
+  --low: #9aa29d;
+  --wave: #7aa95b;
+  --wave-dim: #c8d3c1;
+  --playhead: #17201b;
+
+  --dock: #13221c;
+  --dock-2: #1b2e26;
+  --dock-border: #2c4339;
+  --dock-text: #e4efe6;
+  --dock-text-2: #9db3a5;
+
+  --shadow-1: 0 1px 2px rgba(18, 28, 22, 0.06), 0 1px 1px rgba(18, 28, 22, 0.04);
+  --shadow-2: 0 4px 14px rgba(18, 28, 22, 0.08), 0 1px 3px rgba(18, 28, 22, 0.06);
+  --shadow-pop: 0 18px 48px rgba(18, 28, 22, 0.18), 0 3px 10px rgba(18, 28, 22, 0.08);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e1311;
+  --surface: #151b18;
+  --surface-2: #1a221e;
+  --surface-3: #222c27;
+  --border: #26312c;
+  --border-strong: #36443d;
+  --text: #e6ede8;
+  --text-2: #a5b1aa;
+  --text-3: #6f7c75;
+  --focus: #b9ec6e;
+
+  --brand: #c7f67a;
+  --brand-ink: #13221c;
+  --accent: #c7f67a;
+  --accent-hover: #d7fb9b;
+  --on-accent: #13221c;
+  --accent-soft: rgba(199, 246, 122, 0.12);
+  --accent-text: #c7f67a;
+
+  --cut: #f07c72;
+  --cut-soft: rgba(240, 124, 114, 0.14);
+  --cut-wave: rgba(240, 124, 114, 0.2);
+  --select: #f3c14f;
+  --select-soft: rgba(243, 193, 79, 0.16);
+  --pause: #b49cf5;
+  --pause-soft: rgba(180, 156, 245, 0.15);
+  --retake: #73b2ef;
+  --retake-soft: rgba(115, 178, 239, 0.14);
+  --filler: #f0a64b;
+  --filler-soft: rgba(240, 166, 75, 0.15);
+  --stutter: #f08d6a;
+  --stutter-soft: rgba(240, 141, 106, 0.15);
+  --low: #6f7c75;
+  --wave: #a8d68a;
+  --wave-dim: #3b4b42;
+  --playhead: #f4f8ee;
+
+  --dock: #0b1310;
+  --dock-2: #111c17;
+  --dock-border: #22342b;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 20px 50px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}

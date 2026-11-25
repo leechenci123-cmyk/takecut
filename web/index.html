@@ -1,49 +1,21 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>复听 · 口播剪辑台</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="application-name" content="TAKECUT">
+  <meta name="color-scheme" content="light dark">
+  <title>复听 Takecut</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/home.css">
+  <link rel="stylesheet" href="/css/editor.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
 <body>
-<header><div class="wrap bar"><div class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b></i>复听 <small>TAKECUT</small></div><div class="bar-right"><span>本地口播剪辑台</span><button id="import" class="primary">＋ 导入录音</button><input type="file" hidden id="file" accept="audio/*,.mp4,.m4a,.flac,.ogg,.webm"></div></div></header>
-<main class="wrap">
-<div class="intro"><div><div class="eyebrow" id="kind">示例录音</div><h1 id="name">中文口播练习</h1><p id="status" role="status">正在载入示例…</p></div><div class="exports"><button id="undo" disabled>撤销</button><button id="wav" disabled>导出 WAV</button><button id="srt" disabled>导出字幕</button></div></div>
-<section class="deck" aria-label="声音工作台">
-<div class="deck-head"><div class="track-name"><span class="lamp"></span>原声波形</div><div class="zoom"><button id="zoomOut" aria-label="缩小波形">−</button><span id="scale">全段</span><button id="zoomIn" aria-label="放大波形">＋</button></div></div>
-<canvas id="wave" aria-label="点击原声波形定位，拖动选取要剪的范围"></canvas>
-<div class="ruler"><span id="leftTick">00:00</span><span id="midTick"></span><span id="rightTick"></span></div>
-<div class="transport"><button id="play" class="play" title="从播放头开始，自动跳过红色删段" disabled>▶ 播放</button><button id="preview" disabled>试听剪后</button><button id="join" hidden>试听剪点</button><span id="clock">00:00.0</span><span class="total"> / <span id="duration">00:00.0</span></span></div>
-<section class="manual" aria-labelledby="manualTitle">
-<h2 id="manualTitle">手动剪辑</h2>
-<div class="manual-tools">
-<button id="split" title="在播放头处分割（Ctrl+B）">分割 <kbd>Ctrl B</kbd></button>
-<button id="markIn">标入点 <kbd>I</kbd></button>
-<button id="markOut">标出点 <kbd>O</kbd></button>
-<button id="cut" class="cut-btn">剪掉选区 <kbd>Shift ⌫</kbd></button>
-<button id="listenSel">听选区</button><button id="clearMarks">清除选区 <kbd>Esc</kbd></button>
-</div>
-<div class="bounds"><label>入点 <input id="start" type="number" min="0" step="0.01" placeholder="—" aria-label="入点秒数"></label><label>出点 <input id="end" type="number" min="0" step="0.01" placeholder="—" aria-label="出点秒数"></label><span id="rangeTime"></span></div>
-<p>单击波形定位，双击选中分割后的一段。← → 微调 0.05 秒，空格播放或暂停。</p>
-<details id="pauseEditor" class="pause-editor">
-<summary>气口</summary>
-<div class="pause-tools">
-<button type="button" data-pause-length="0.2">0.2 秒</button>
-<button type="button" data-pause-length="0.4">0.4 秒</button>
-<button type="button" data-pause-length="0.8">0.8 秒</button>
-<label>时长（秒） <input id="pauseLength" type="number" min="0" max="60" step="0.01" value="0.40"></label>
-<button id="insertPause" class="cut-btn">插入气口</button>
-<button id="replacePause" title="用指定时长的静音替换选区">调整原有停顿</button>
-</div>
-<div id="pauseList" class="pause-tools" aria-label="已插入的气口" hidden></div>
-<div id="pauseActions" class="pause-tools" hidden>
-<label class="pause-slider">调整长度 <input id="pauseSlider" type="range" min="0.01" max="2" step="0.01" aria-label="拖动调整气口长度"></label>
-<button id="resizePause">应用时长</button>
-<button id="reviewPause">循环试听</button>
-<button id="deletePause">删除气口</button>
-</div>
-<p>在播放头处插入静音。波形上的紫色标记可选中气口。调整原有停顿时，请先框选停顿范围。</p>
-</details>
-</section>
-</section>
-<div class="grid"><section class="panel"><div class="panel-title"><div><h2>逐字稿</h2></div><span id="lineCount" class="count"></span></div>
-<p class="hint">点词回听，拖选文字或波形可剪掉一段。</p><div id="rows"></div>
-</section>
-<aside class="panel"><div class="panel-title"><div><h2>重录与卡词</h2></div><span id="reviewCount" class="count"></span></div><div id="reviews"></div><div class="summary"><span>已剪时长</span><strong id="removed">0.0 秒</strong></div><div class="summary"><span>成片时长</span><strong id="resultTime">—</strong></div></aside></div>
-<footer><span>录音仅在本机处理</span><button id="demo">打开示例录音</button></footer>
-</main><div id="drop">松开以导入录音</div><script type="module" src="/app.js"></script></body></html>
+  <div id="app" class="app"><p class="boot">TAKECUT</p></div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+  <div id="drop" class="drop-overlay" hidden><div class="drop-card"><span class="drop-icon" data-icon="upload"></span><p id="dropText"></p></div></div>
+</body>
+</html>

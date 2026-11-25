@@ -123,13 +123,31 @@ test("long pauses on the sample: five gaps and the trailing silence", () => {
   assert.equal(again.length, 5);
 });
 
-test("pauses use the detected silence and skip gaps that were already edited", () => {
+test("pauses use the detected silence and measure gaps after earlier cuts", () => {
   const ws = w(["一@0-0.5", "二@2-2.5"]);
   const silences = [[0.6, 1.7]];
+  // 1.5 s gap, 1.1 s of it silent: remove 1.05 s from the middle of the silence.
   const [p] = findLongPauses(ws, emptyEdits(), { duration: 3, silences, target: 0.4 });
-  nearAll(p.ranges, [[0.8, 1.5]]);
+  nearAll(p.ranges, [[0.625, 1.675]]);
+  // A cut inside the gap (e.g. a removed retake) leaves 1.4 s audible: still too long.
   const cut = { ...emptyEdits(), cuts: [[0.9, 1.0]] };
-  assert.equal(findLongPauses(ws, cut, { duration: 3, silences }).filter(x => x.type === "pause").length, 0);
+  const [q] = findLongPauses(ws, cut, { duration: 3, silences }).filter(x => x.type === "pause");
+  near(q.length, 1.4);
+  assert.ok(q.ranges[0][0] >= 1.0 && q.ranges[0][1] <= 1.7, String(q.ranges));
+  // Once shortened, it is not suggested again.
+  const done = { ...cut, cuts: [[0.9, 1.0], q.ranges[0]] };
+  assert.equal(findLongPauses(ws, done, { duration: 3, silences }).filter(x => x.type === "pause").length, 0);
+  // An inserted pause inside the gap means the user already shaped it.
+  assert.equal(findLongPauses(ws, { ...emptyEdits(), pauses: [{ at: 1.2, duration: 0.3 }] }, { duration: 3, silences }).filter(x => x.type === "pause").length, 0);
+});
+
+test("removing a retake leaves the join's long silence as a pause suggestion", () => {
+  const lines = splitLines(zh);
+  const [retake] = findRetakes(lines, "cjk");
+  const edits = applyCut(emptyEdits(), keepTakeRanges(retake, 1), { duration: DURATION, sampleRate: 44100 }).edits;
+  const join = findLongPauses(zh, edits, { duration: DURATION }).find(p => p.key === "pause:2.76");
+  assert.ok(join, "the gap before the kept take is still suggested");
+  near(join.length, (3.785 - 2.76) + (6.3 - 6.22), 1e-6);
 });
 
 test("bundled samples: every suggestion type the demo relies on is found", () => {

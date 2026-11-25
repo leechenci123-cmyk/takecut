@@ -1,7 +1,7 @@
 // Long pauses between kept words. "Shorten to X s" removes the middle of the real silence and keeps
 // X seconds of the original room tone, so the join still breathes. Recomputed after every edit.
 
-import { isWordCut, overlapsCut } from "../timeline.js";
+import { isWordCut, overlapsCut, keepRanges } from "../timeline.js";
 
 export const DEFAULT_THRESHOLD = 0.8;
 export const DEFAULT_TARGET = 0.4;
@@ -22,24 +22,35 @@ export function findLongPauses(words, { cuts, pauses }, { duration, threshold = 
   const kept = [];
   for (let i = 0; i < words.length; i++) if (!isWordCut(cuts, words[i])) kept.push(i);
   if (!kept.length) return out;
-  const half = target / 2;
   const free = (a, b) => !overlapsCut(cuts, a, b) && !pauses.some(p => p.at >= a && p.at <= b);
 
   const first = words[kept[0]], last = words[kept.at(-1)];
   if (first.start > Math.max(0.6, target) && free(0, first.start)) {
     out.push(edge("start", [0, first.start - Math.min(0.25, target)], 0, first.start));
   }
+  const keep = keepRanges(cuts, duration);
   for (let k = 0; k < kept.length - 1; k++) {
     const p = words[kept[k]], n = words[kept[k + 1]];
-    const gap = n.start - p.end;
-    if (gap <= threshold || !free(p.end, n.start)) continue;
-    const quiet = silenceIn(silences, p.end, n.start);
-    if (!quiet || quiet[1] - quiet[0] <= target + 0.05) continue;
+    if (n.start <= p.end || pauses.some(pz => pz.at >= p.end && pz.at <= n.start)) continue;
+    // The gap as heard after editing: its uncut pieces (a retake cut may sit inside it).
+    const pieces = keep.map(([a, b]) => [Math.max(a, p.end), Math.min(b, n.start)]).filter(([a, b]) => b > a);
+    const gap = pieces.reduce((sum, [a, b]) => sum + b - a, 0);
+    if (gap <= threshold) continue;
+    let quiet = null;
+    for (const [a, b] of pieces) {
+      const q = silenceIn(silences, a, b);
+      if (q && (!quiet || q[1] - q[0] > quiet[1] - quiet[0])) quiet = q;
+    }
+    if (!quiet) continue;
+    // Remove from the middle of the longest quiet stretch, keeping a little of it on both sides.
+    const remove = Math.min(gap - target, quiet[1] - quiet[0] - 0.05);
+    if (remove < 0.1) continue;
+    const mid = (quiet[0] + quiet[1]) / 2;
     out.push({
       type: "pause", category: "pauses",
       key: `pause:${p.end.toFixed(2)}`,
       start: p.end, end: n.start, length: gap, after: kept[k], before: kept[k + 1],
-      ranges: [[quiet[0] + half, quiet[1] - half]],
+      ranges: [[mid - remove / 2, mid + remove / 2]],
     });
   }
   if (duration - last.end > Math.max(0.6, target) && free(last.end, duration)) {
