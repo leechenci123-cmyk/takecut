@@ -20,7 +20,7 @@ export const vttTime = sec => clock(sec, ".");
  */
 export function stripPunctuation(text) {
   return text
-    .replace(/[，、；：。．…]+/g, " ")
+    .replace(/[，、﹑；：。．…]+/g, " ")
     .replace(/(?<=\p{Script=Han})[,;:.]+/gu, " ")
     .replace(/\.+$/, "")
     .replace(/\s+/g, " ")

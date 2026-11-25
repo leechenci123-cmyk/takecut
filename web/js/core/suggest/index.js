@@ -13,7 +13,7 @@ export function staticSuggestions({ words, lines, lineOf, script, duration, anal
   return [
     ...findRetakes(lines, script),
     ...findRestarts(words, lines, script),
-    ...findStutters(words),
+    ...findStutters(words, script),
     ...findFillers(words, lines, lineOf, script, duration),
     ...findUnrecognized(words, analysis?.sounds),
   ].sort((a, b) => a.start - b.start);

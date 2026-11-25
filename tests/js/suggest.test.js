@@ -9,7 +9,7 @@ import { findLongPauses } from "../../web/js/core/suggest/pauses.js";
 import { staticSuggestions, statusOf, rangesFor } from "../../web/js/core/suggest/index.js";
 import { applyCut, emptyEdits } from "../../web/js/core/edits.js";
 import { tokensOf } from "../../web/js/core/text.js";
-import { sampleWords, nearAll, near, spaced, words as w } from "./helpers.js";
+import { sampleWords, bundledSample, nearAll, near, spaced, words as w } from "./helpers.js";
 
 const zh = sampleWords();
 const zhLines = splitLines(zh);
@@ -130,6 +130,17 @@ test("pauses use the detected silence and skip gaps that were already edited", (
   nearAll(p.ranges, [[0.8, 1.5]]);
   const cut = { ...emptyEdits(), cuts: [[0.9, 1.0]] };
   assert.equal(findLongPauses(ws, cut, { duration: 3, silences }).filter(x => x.type === "pause").length, 0);
+});
+
+test("bundled samples: every suggestion type the demo relies on is found", () => {
+  for (const [lang, expected] of [["zh", ["retake", "stutter", "stutter"]], ["en", ["retake", "filler", "stutter", "stutter"]]]) {
+    const { words, analysis } = bundledSample(lang);
+    const lines = splitLines(words), script = scriptOf(words);
+    const found = staticSuggestions({ words, lines, lineOf: lineIndex(lines, words.length), script, duration: analysis.duration, analysis });
+    assert.deepEqual(found.map(s => s.type), expected, lang);
+    const pauses = findLongPauses(words, emptyEdits(), { duration: analysis.duration, silences: analysis.silences });
+    assert.ok(pauses.filter(p => p.type === "pause").length >= 5, `${lang} pauses`);
+  }
 });
 
 test("status follows the edits: applying or ignoring closes a suggestion", () => {

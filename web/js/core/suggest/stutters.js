@@ -3,8 +3,12 @@
 
 import { normalize, endsClause } from "../text.js";
 
-export function findStutters(words) {
+/** Repeats of words up to this many letters count (CJK words are a few characters long). */
+const MAX_LENGTH = { cjk: 4, latin: 12 };
+
+export function findStutters(words, script = "cjk") {
   const out = [];
+  const maxLength = MAX_LENGTH[script] ?? 4;
   for (let i = 0; i < words.length - 1; i++) {
     const t = normalize(words[i].text);
     if (!t) continue;
@@ -16,7 +20,7 @@ export function findStutters(words) {
         continue;
       }
     }
-    if (t.length > 4) continue;
+    if (t.length > maxLength) continue;
     let j = i + 1;
     while (j < words.length && words[j].start - words[j - 1].end < 0.85 && normalize(words[j].text) === t) j++;
     const separated = endsClause(words[i].text) || (j > i + 1 && words[i + 1].start - words[i].end > 0.18);

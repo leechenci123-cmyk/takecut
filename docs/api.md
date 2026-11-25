@@ -34,7 +34,7 @@ A **Summary** is the `project.json` content:
 {
   "id": "3f2a…(32 hex)", "name": "Episode 12", "created": 1764100000.0, "updated": 1764100100.0,
   "status": "queued | transcribing | ready | error", "error": null,
-  "duration": 21.8, "sampleRate": 44100, "channels": 1,
+  "duration": 21.8, "frames": 961154, "sampleRate": 44100, "channels": 1,
   "language": "zh | en | auto", "detectedLanguage": "zh", "model": "small", "device": "cpu",
   "sample": false, "job": "<job id while working>",
   "stats": {"editedDuration": 19.6, "cutSeconds": 2.6}
@@ -50,7 +50,7 @@ A **Summary** is the `project.json` content:
   - `X-Model` (optional): a model name from `/api/system`.
 - Response: `202 {"id": "…", "job": "…"}`.
 
-`POST /api/samples/<zh|en>` opens a bundled sample as a project and returns `{"id": "…"}`. Every call makes a fresh copy, so the sample always starts unedited.
+`POST /api/samples/<zh|en>` opens a bundled sample as a project and returns its Summary. The sample project is reused while it exists; delete it to start over from the original.
 
 `GET /api/projects/<id>` → `{"project": Summary, "words": [Word], "analysis": Analysis | null, "edits": Edits}`
 
@@ -92,7 +92,7 @@ A **Summary** is the `project.json` content:
 ```
 
 - `loudness`: `null`, `-16` or `-14` (LUFS).
-- `segments`: `renderList(buildPlan(...))` from `web/js/core/timeline.js`. Audio pieces are source frame ranges `[start, end)`; silence pieces are frame counts.
+- `segments`: `renderList(buildPlan(...))` from `web/js/core/timeline.js`. Audio pieces are source frame ranges `[start, end)`; silence pieces are frame counts. An `end` up to 0.1 s past the source is clamped (browser decoders can differ by a few samples).
 - The server renders from the full-quality source with FFmpeg and adds a 3 ms fade at every join.
 
 When the job finishes, its `result` is `{"file": "Episode 12-takecut.mp3", "size": 123456, "duration": 19.6}`. Download it from `GET /api/projects/<id>/exports/<file>`, which is served as an attachment.

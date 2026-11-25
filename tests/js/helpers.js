@@ -1,14 +1,19 @@
 import { readFileSync, existsSync } from "node:fs";
 import assert from "node:assert/strict";
 
-/** The bundled Chinese sample transcript (51 words, about 21 s). */
+/** The v3 Chinese demo transcript (51 words, about 21.8 s), kept as a fixture to pin v3 behavior. */
 export function sampleWords() {
-  for (const path of ["samples/zh/words.json", "demo/words.json"]) {
-    const url = new URL(`../../${path}`, import.meta.url);
-    if (existsSync(url)) return JSON.parse(readFileSync(url, "utf8")).map(w => ({ start: w.start, end: w.end, text: w.text }));
-  }
-  throw new Error("sample transcript not found");
+  const url = new URL("../fixtures/zh-v3-words.json", import.meta.url);
+  return JSON.parse(readFileSync(url, "utf8")).map(w => ({ start: w.start, end: w.end, text: w.text }));
 }
+
+/** A bundled sample's words and analysis. */
+export function bundledSample(lang) {
+  const read = name => JSON.parse(readFileSync(new URL(`../../samples/${lang}/${name}`, import.meta.url), "utf8"));
+  return { words: read("words.json"), analysis: read("analysis.json") };
+}
+
+export const fileExists = path => existsSync(new URL(`../../${path}`, import.meta.url));
 
 export const near = (actual, expected, eps = 1e-6, msg) =>
   assert.ok(Math.abs(actual - expected) <= eps, msg ?? `expected ${expected}, got ${actual}`);

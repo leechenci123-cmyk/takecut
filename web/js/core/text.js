@@ -22,7 +22,7 @@ export function scriptOf(words) {
 
 const CLOSERS = "[\"”’」』）)]?";
 const SENTENCE_END = new RegExp(`[。！？.!?…]${CLOSERS}$`);
-const CLAUSE_END = new RegExp(`[，,、；;：:]${CLOSERS}$`);
+const CLAUSE_END = new RegExp(`[，,、﹑；;：:]${CLOSERS}$`);
 
 export const endsSentence = s => SENTENCE_END.test(String(s ?? "").trim());
 export const endsClause = s => CLAUSE_END.test(String(s ?? "").trim());
