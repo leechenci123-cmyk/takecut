@@ -50,7 +50,7 @@
 
 ## AI 部分怎么实现
 
-- **语音识别：OpenAI Whisper**，用 [faster-whisper](https://github.com/SYSTRAN/faster-whisper) 在本机运行。这是复听里唯一的机器学习模型。
+- **语音识别：OpenAI Whisper**，用 [faster-whisper](https://github.com/SYSTRAN/faster-whisper) 在本机运行。复听用到两个机器学习模型：Whisper 和 faster-whisper 自带的 Silero VAD（语音活动检测的小模型）；下面其余部分都是规则和信号处理。
   - `small` 模型任何 CPU 都能跑。`large-v3-turbo` 更准，能真正用上 CUDA GPU 时会默认选它；缺少 GPU 库就自动退回 CPU。
   - 转录在子进程里跑，显卡驱动出问题也不会拖垮整个程序。
   - 参数：`word_timestamps=True`；Silero VAD（`vad_filter`，faster-whisper 自带）；`condition_on_previous_text=False`（减少 Whisper 自己编出来的重复句）；按语言设置的 `initial_prompt`，里面故意写了语气词（「嗯，呃，那个…」/「Um, uh, so, like…」）。Whisper 习惯把口误省掉，这个提示词让它尽量保留，也让普通话输出简体字。

@@ -52,7 +52,7 @@ Built for the Devpost hackathon **Build Your First AI App 2026**.
 
 ## AI implementation
 
-- **Speech recognition: OpenAI Whisper**, run locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). This is the only machine-learning model in Takecut.
+- **Speech recognition: OpenAI Whisper**, run locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Whisper and Silero VAD (a small voice-activity model bundled with faster-whisper) are the two machine-learning models Takecut uses; everything else below is rules and signal processing.
   - The `small` model runs on any CPU. `large-v3-turbo` is more accurate and becomes the default when a CUDA GPU can actually be used. If the GPU libraries are missing, Takecut falls back to the CPU on its own.
   - Transcription runs in a child process, so a GPU driver problem can't take down the app.
   - Options used: `word_timestamps=True`, Silero VAD (`vad_filter`, bundled with faster-whisper), `condition_on_previous_text=False` (fewer repeated hallucinations), and a language-specific `initial_prompt` written with fillers ("嗯，呃，那个…" / "Um, uh, so, like…"). Whisper tends to drop disfluencies, and the prompt nudges it to keep them and to answer Mandarin in Simplified characters.

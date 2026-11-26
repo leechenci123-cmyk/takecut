@@ -1,4 +1,4 @@
-"""Speech recognition with faster-whisper (OpenAI Whisper), the only ML model in Takecut.
+"""Speech recognition with faster-whisper (OpenAI Whisper, plus its bundled Silero VAD model).
 
 Runs as a child process (`python -m takecut.transcribe ...`) so that a GPU driver problem can
 only take down the child: the server then retries on the CPU. Progress is printed to stdout as
