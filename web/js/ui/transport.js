@@ -11,6 +11,10 @@ export function createTransport(S, root, waveform) {
     type: "button", dataset: { mode: m }, title: t(`transport.${m}`),
     onclick: () => { S.setPref("mode", m); waveform.fit(); },
   }, t(`transport.${m}`))));
+  const capToggle = button(t("wave.captions"), {
+    icon: "subtitles", class: "small cap-toggle", title: t("wave.toggleCaptions"),
+    onclick: () => S.setPref("showCaptions", S.prefs.showCaptions === false),
+  });
   const selection = h("span", { class: "sel-info" });
   const cut = button(t("sel.cut"), { icon: "scissors", class: "small", onclick: () => S.cutSelection() });
   const stats = h("span", { class: "stats" });
@@ -19,7 +23,7 @@ export function createTransport(S, root, waveform) {
     button(null, { icon: "rewind", class: "ghost icon-only small", title: t("transport.toStart"), onclick: () => S.seekEdited(0) }),
     play, time,
     h("span", { class: "divider" }),
-    modes,
+    modes, capToggle,
     button(null, { icon: "zoomOut", class: "ghost icon-only small", title: t("transport.zoomOut"), onclick: () => waveform.zoom(1 / 1.6) }),
     button(null, { icon: "zoomIn", class: "ghost icon-only small", title: t("transport.zoomIn"), onclick: () => waveform.zoom(1.6) }),
     button(null, { icon: "fit", class: "ghost icon-only small", title: t("transport.fit"), onclick: () => waveform.fit() }),
@@ -46,6 +50,7 @@ export function createTransport(S, root, waveform) {
   function updateStats() {
     stats.textContent = t("transport.stats", { cut: secs(S.cutSeconds()), n: S.edits.pauses.length });
     for (const b of modes.children) b.setAttribute("aria-pressed", String(b.dataset.mode === S.prefs.mode));
+    capToggle.setAttribute("aria-pressed", String(S.prefs.showCaptions !== false));
   }
 
   const offs = [

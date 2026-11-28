@@ -22,7 +22,7 @@ import { secs, debounce } from "./dom.js";
 const PREFS_KEY = "takecut.editor";
 
 function loadPrefs() {
-  const base = { threshold: DEFAULT_THRESHOLD, target: DEFAULT_TARGET, showCut: true, follow: true, mode: "edited", tab: "cleanup", collapsed: [] };
+  const base = { threshold: DEFAULT_THRESHOLD, target: DEFAULT_TARGET, showCut: true, showCaptions: true, follow: true, mode: "edited", tab: "cleanup", collapsed: [] };
   try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") }; } catch { return base; }
 }
 

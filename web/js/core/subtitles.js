@@ -13,6 +13,20 @@ function clock(sec, sep) {
 export const srtTime = sec => clock(sec, ",");
 export const vttTime = sec => clock(sec, ".");
 
+export function lrcTime(sec) {
+  const cs = Math.max(0, Math.round(sec * 100));
+  return `${pad(Math.floor(cs / 6000))}:${pad(Math.floor(cs / 100) % 60)}.${pad(cs % 100)}`;
+}
+
+export function shortRangeTime(sec) {
+  const cs = Math.max(0, Math.round(sec * 100));
+  const h = Math.floor(cs / 360000);
+  const m = Math.floor(cs / 6000) % 60;
+  const s = Math.floor(cs / 100) % 60;
+  const frac = pad(cs % 100);
+  return h ? `${pad(h)}:${pad(m)}:${pad(s)}.${frac}` : `${pad(m)}:${pad(s)}.${frac}`;
+}
+
 /**
  * Chinese subtitle style: commas and full stops become spaces and the cue has no end period.
  * Keeps ？！ and quotes. Whisper often writes ASCII commas in Chinese text, so those count too
@@ -80,6 +94,8 @@ export function buildCues(words, lines, edits, plan, { maxChars = 0, strip = fal
 
 export const toSRT = cues => cues.map((c, k) => `${k + 1}\r\n${srtTime(c.start)} --> ${srtTime(c.end)}\r\n${c.text}`).join("\r\n\r\n") + "\r\n";
 export const toVTT = cues => "WEBVTT\n\n" + cues.map(c => `${vttTime(c.start)} --> ${vttTime(c.end)}\n${c.text}`).join("\n\n") + "\n";
+export const toLRC = cues => cues.map(c => `[${lrcTime(c.start)}]${c.text}`).join("\n") + "\n";
+export const toTimedTXT = cues => cues.map(c => `[${shortRangeTime(c.start)} - ${shortRangeTime(c.end)}] ${c.text}`).join("\n") + "\n";
 
 /** The kept transcript as plain text, one line per transcript line. */
 export function toTXT(words, lines, edits) {

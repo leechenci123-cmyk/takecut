@@ -38,10 +38,12 @@ export const api = {
   remove: id => request("DELETE", `/api/projects/${id}`),
   saveEdits: (id, edits, stats) => request("PUT", `/api/projects/${id}/edits`, { json: { edits, stats } }),
   retranscribe: (id, options) => request("POST", `/api/projects/${id}/transcribe`, { json: options }),
+  preprocess: (id, mode = "clean") => request("POST", `/api/projects/${id}/preprocess`, { json: { mode } }),
   export: (id, options) => request("POST", `/api/projects/${id}/export`, { json: options }),
+  exportCaptions: (id, options) => request("POST", `/api/projects/${id}/export/captions`, { json: options }),
   job: id => request("GET", `/api/jobs/${id}`),
   convert: (texts, to) => request("POST", "/api/text/convert", { json: { texts, to } }),
-  audioUrl: id => `/api/projects/${id}/audio`,
+  audioUrl: (id, v) => (v ? `/api/projects/${id}/audio?v=${encodeURIComponent(v)}` : `/api/projects/${id}/audio`),
   exportUrl: (id, file) => `/api/projects/${id}/exports/${encodeURIComponent(file)}`,
 
   /** Save on page unload: keepalive lets the request finish after the page is gone. */
@@ -55,7 +57,7 @@ export const api = {
   },
 
   /** Upload with progress (fetch can't report upload progress). Resolves to {id, job}. */
-  upload(file, { language, model }, onProgress) {
+  upload(file, { language, model, cleanVoice = true }, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/projects");
@@ -63,6 +65,7 @@ export const api = {
       xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
       xhr.setRequestHeader("X-Language", language);
       if (model) xhr.setRequestHeader("X-Model", model);
+      xhr.setRequestHeader("X-Clean-Voice", cleanVoice ? "1" : "0");
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
       xhr.upload.onprogress = e => e.lengthComputable && onProgress?.(e.loaded / e.total);
       xhr.onload = () => {
