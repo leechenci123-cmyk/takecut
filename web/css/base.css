@@ -169,3 +169,23 @@ dialog.dialog[open] { animation: dialog-in 0.2s var(--ease); }
 .logo-mark { width: 30px; height: 30px; border-radius: 8px; background: #16372e; display: grid; place-items: center; }
 .logo-mark svg { width: 20px; height: 20px; }
 .logo small { font: 700 10.5px var(--mono); letter-spacing: 0.16em; color: var(--text-3); }
+
+/* Microphone recorder card (Home dropzone & Editor modal) */
+.recorder-card {
+  display: grid; gap: 10px; padding: 12px 14px; border-radius: var(--radius-l);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.recorder-card[data-state="recording"] { border-color: color-mix(in srgb, var(--cut) 55%, transparent); background: color-mix(in srgb, var(--cut) 8%, var(--surface-2)); }
+.recorder-card[data-state="paused"] { border-color: color-mix(in srgb, var(--select) 55%, transparent); }
+.rec-idle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rec-start-btn { font-weight: 700; }
+.rec-start-btn .icon { color: var(--cut); }
+.rec-kbd { margin-left: 4px; font-size: 10.5px; }
+.rec-hint { font-size: 12px; color: var(--text-3); }
+.rec-live-top { display: flex; align-items: center; gap: 10px; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cut); flex: none; animation: rec-pulse 1.1s ease-in-out infinite; }
+.rec-dot.paused { background: var(--select); animation: none; }
+@keyframes rec-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.82); } }
+.rec-timer { font: 700 15px var(--mono); font-variant-numeric: tabular-nums; min-width: 68px; }
+.rec-meter { flex: 1; min-width: 80px; height: 26px; display: block; border-radius: 6px; background: var(--surface-3); }
+.rec-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

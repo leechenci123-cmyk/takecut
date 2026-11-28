@@ -6,6 +6,8 @@ import { t, getLang, errorText } from "../i18n.js";
 import { api } from "../api.js";
 import { prefButtons, logo } from "./prefs.js";
 import { toast, confirmDialog, promptDialog, openMenu } from "./overlay.js";
+import { createRecorderWidget } from "./recorderPanel.js";
+import { openShortcuts } from "./shortcuts.js";
 
 const OPTIONS_KEY = "takecut.import";
 const ACCEPT = "audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.webm,.mp4,.mov,.mkv";
@@ -33,8 +35,11 @@ export async function importFile(file) {
   const options = importOptions();
   setUpload({ name: file.name, progress: 0 });
   try {
-    const res = await api.upload(file, { language: options.language || "auto", model: options.model || null },
-      progress => setUpload({ name: file.name, progress }));
+    const res = await api.upload(file, {
+      language: options.language || "auto",
+      model: options.model || null,
+      cleanVoice: options.cleanVoice !== false,
+    }, progress => setUpload({ name: file.name, progress }));
     setUpload(null);
     location.hash = `#/p/${res.id}`;
   } catch (err) {
@@ -53,8 +58,15 @@ function formatDate(seconds) {
 export function mountHome(root) {
   let system = null, projects = null, jobs = {}, timer = 0, alive = true, failed = null;
   const el = h("div", { class: "home" });
+  const recorder = createRecorderWidget({ onComplete: file => importFile(file) });
   root.append(el);
   uploadListeners.add(render);
+  const onHomeKey = e => {
+    if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
+    if (e.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
+    if (e.key === "?") { e.preventDefault(); openShortcuts(); }
+  };
+  window.addEventListener("keydown", onHomeKey);
   render();
   refresh();
 
@@ -78,7 +90,7 @@ export function mountHome(root) {
 
   function render() {
     el.replaceChildren(
-      h("header", { class: "topbar" }, logo(), h("span", { class: "grow" }), ...prefButtons()),
+      h("header", { class: "topbar" }, logo(), h("span", { class: "grow" }), ...prefButtons({ onHelp: openShortcuts })),
       h("main", { class: "home-main" },
         h("section", { class: "hero" }, heroCopy(), dropzone()),
         recent()),
@@ -123,13 +135,20 @@ export function mountHome(root) {
     const model = h("select", { class: "input", onchange: e => saveImportOptions({ model: e.target.value }) },
       models.map(m => h("option", { value: m.name, selected: m.name === chosen }, t(`home.model.${m.name}`) + (m.cached ? "" : t("home.model.download")))));
 
+    const cleanCheck = h("input", {
+      type: "checkbox", checked: options.cleanVoice !== false,
+      onchange: e => saveImportOptions({ cleanVoice: e.target.checked }),
+    });
+
     return h("div", { class: "dropzone" },
       input,
       target,
+      !upload && recorder.el,
       noFfmpeg && h("div", { class: "import-note", style: { color: "var(--cut)" } }, icon("info"), t("home.noFfmpeg")),
       h("div", { class: "import-options" },
         h("label", { class: "field" }, h("span", { class: "label" }, t("home.language")), language),
         h("label", { class: "field" }, h("span", { class: "label" }, t("home.model")), model)),
+      h("label", { class: "check", style: { fontSize: "13px" } }, cleanCheck, t("home.cleanVoice")),
       system && h("div", { class: "import-note" }, icon(system.cuda ? "chip" : "info"), system.cuda ? t("home.model.gpu") : t("home.model.cpu")),
       h("div", { class: "samples" },
         h("span", null, t("home.samples")),
@@ -176,6 +195,7 @@ export function mountHome(root) {
       const s = p.stats;
       status = h("div", { class: "project-stats" },
         p.sample && h("span", { class: "badge accent" }, t("home.sampleTag")),
+        p.preprocessed && p.audioMode !== "raw" && h("span", { class: "badge accent" }, t("home.cleanTag")),
         p.detectedLanguage && h("span", { class: "badge" }, p.detectedLanguage === "zh" ? "中文" : p.detectedLanguage === "en" ? "English" : p.detectedLanguage),
         s?.cutSeconds > 0 && h("span", { class: "badge cut" }, t("home.trimmed", { cut: secs(s.cutSeconds) })),
         s && h("span", { class: "badge" }, t("home.final", { dur: short(s.editedDuration) })));
@@ -221,8 +241,14 @@ export function mountHome(root) {
   }
 
   return {
-    destroy() { alive = false; clearTimeout(timer); uploadListeners.delete(render); },
-    relocalize: render,
+    destroy() {
+      alive = false;
+      clearTimeout(timer);
+      uploadListeners.delete(render);
+      window.removeEventListener("keydown", onHomeKey);
+      recorder.destroy();
+    },
+    relocalize() { recorder.relocalize(); render(); },
     retheme: render,
   };
 }

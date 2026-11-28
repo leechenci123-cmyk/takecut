@@ -4,7 +4,7 @@ import { h, button } from "./dom.js";
 import { t } from "../i18n.js";
 import { modal } from "./overlay.js";
 
-export function bindShortcuts(S, { onExport, onHelp, waveform }) {
+export function bindShortcuts(S, { onExport, onHelp, onRecord, waveform }) {
   const focusedRetake = () => {
     const found = S.focus && S.suggestions().find(x => x.s.key === S.focus && x.status === "open");
     return found?.s.type === "retake" ? found.s : null;
@@ -20,6 +20,7 @@ export function bindShortcuts(S, { onExport, onHelp, waveform }) {
     if (mod && lower === "b") return run(e, S.split);
     if (mod && lower === "e") return run(e, onExport);
     if (mod || e.altKey) return;
+    if (e.shiftKey && lower === "r" && onRecord && !e.repeat) return run(e, onRecord);
     if (key === "?") return run(e, onHelp);
     switch (key) {
       case " ": return run(e, () => !e.repeat && S.toggle());
@@ -68,6 +69,9 @@ const ROWS = [
   ["keys.fix", ["Double-click"]],
   ["keys.clear", ["Esc"]],
   ["keys.export", ["Ctrl", "E"]],
+  ["keys.recStart", ["R", "Shift+R"]],
+  ["keys.recPause", ["P", "Space"]],
+  ["keys.recEnd", ["S", "Enter"]],
   ["keys.help", ["?"]],
 ];
 

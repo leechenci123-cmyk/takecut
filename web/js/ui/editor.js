@@ -4,7 +4,7 @@
 import { h, button, iconButton } from "./dom.js";
 import { icon } from "./icons.js";
 import { t, errorText } from "../i18n.js";
-import { api } from "../api.js";
+import { api, waitJob } from "../api.js";
 import { Engine } from "../audio/engine.js";
 import { buildPeaks } from "../audio/peaks.js";
 import { createSession } from "./session.js";
@@ -17,11 +17,13 @@ import { openExport } from "./exportDialog.js";
 import { bindShortcuts, openShortcuts } from "./shortcuts.js";
 import { prefButtons } from "./prefs.js";
 import { toast, openMenu, modal } from "./overlay.js";
+import { openRecorderModal } from "./recorderPanel.js";
+import { importFile } from "./home.js";
 
 export function mountEditor(root, id) {
   const el = h("div", { class: "editor" });
   root.append(el);
-  let S = null, engine = null, peaks = null, data = null, system = null;
+  let S = null, engine = null, peaks = null, data = null, system = null, waveformRef = null, cleaning = false;
   let parts = [], subs = [], unbindKeys = null, alive = true, poll = 0, sidePart = null, mode = "loading";
   const onUnload = () => S?.flush();
   window.addEventListener("beforeunload", onUnload);
@@ -103,17 +105,31 @@ export function mountEditor(root, id) {
     const redo = iconButton("redo", `${t("editor.redo")} (Ctrl+Shift+Z)`, () => S?.redo(), "ghost");
     undo.dataset.role = "undo";
     redo.dataset.role = "redo";
+    const startRecording = () => { S?.stop(); openRecorderModal({ onComplete: importFile, autoStart: true }); };
     const more = iconButton("more", t("editor.retranscribe"), e => openMenu(e.currentTarget, [
+      { label: t("rec.new"), icon: "mic", onclick: startRecording },
       { label: t("editor.retranscribe"), icon: "restore", onclick: retranscribe },
       { label: t("pref.help"), icon: "keyboard", onclick: openShortcuts },
     ]), "ghost");
     const ready = mode === "ready";
+    const isClean = Boolean(data?.project.preprocessed && data?.project.audioMode !== "raw");
+    const isRawSwitchable = Boolean(data?.project.preprocessed && data?.project.audioMode === "raw");
+    const cleanBtn = ready && button(
+      cleaning ? t("editor.cleaning") : isClean ? t("editor.cleanVoiceActive") : isRawSwitchable ? t("editor.cleanVoiceRaw") : t("editor.cleanVoice"),
+      {
+        icon: "sparkle",
+        class: "small voice-pill" + (isClean ? " active" : ""),
+        disabled: cleaning,
+        title: isClean ? t("editor.cleanVoiceSwitchRaw") : isRawSwitchable ? t("editor.cleanVoiceSwitchClean") : t("editor.cleanVoiceTitle"),
+        onclick: () => toggleCleanVoice(isClean ? "raw" : "clean"),
+      },
+    );
     return h("header", { class: "topbar" },
       button(t("editor.back"), { icon: "chevronLeft", class: "ghost collapse-label", onclick: () => { location.hash = "#/"; } }),
       h("span", { class: "divider hide-narrow" }),
       data && title, ready && saveState,
       h("span", { class: "grow" }),
-      ready && [undo, redo, h("span", { class: "divider" })],
+      ready && [cleanBtn, h("span", { class: "divider" }), undo, redo, h("span", { class: "divider" })],
       ...prefButtons({ onHelp: openShortcuts }),
       data && more,
       ready && button(t("editor.export"), { icon: "download", class: "primary", onclick: () => openExport(S, system) }));
@@ -156,13 +172,18 @@ export function mountEditor(root, id) {
     const sidePane = h("aside", { class: "side-pane" }, tabs, sideScroll);
 
     const overview = h("canvas", { class: "overview" });
+    const liveBar = h("div", { class: "wave-live" });
+    const captions = h("canvas", { class: "wave-captions", "aria-label": t("wave.captions") });
     const canvas = h("canvas", { class: "wave", "aria-label": t("transport.edited") });
     const ruler = h("div", { class: "ruler" }, [0, 1, 2, 3, 4].map(() => h("span")));
     const transportRow = h("div", { class: "transport" });
-    const dock = h("footer", { class: "dock" }, h("div", { class: "timeline" }, overview, h("div", { class: "wave-wrap" }, canvas), ruler), transportRow);
+    const dock = h("footer", { class: "dock" },
+      h("div", { class: "timeline" }, overview, liveBar, captions, h("div", { class: "wave-wrap" }, canvas), ruler),
+      transportRow);
 
     el.replaceChildren(topbar(), h("div", { class: "editor-main" }, transcriptPane, sidePane), dock);
-    const waveform = createWaveform(S, { canvas, overview, ruler, peaks });
+    const waveform = createWaveform(S, { canvas, captions, liveBar, overview, ruler, peaks });
+    waveformRef = waveform;
     parts.push(createTranscript(S, scroll), waveform, createTransport(S, transportRow, waveform));
 
     const renderTabs = () => {
@@ -185,7 +206,12 @@ export function mountEditor(root, id) {
       S.on("pause", () => { if (S.selectedPause != null && S.prefs.tab !== "pauses") showTab("pauses"); }),
     ];
     refreshTopbar();
-    unbindKeys = bindShortcuts(S, { onExport: () => openExport(S, system), onHelp: openShortcuts, waveform });
+    unbindKeys = bindShortcuts(S, {
+      onExport: () => openExport(S, system),
+      onHelp: openShortcuts,
+      onRecord: () => { S?.stop(); openRecorderModal({ onComplete: importFile, autoStart: true }); },
+      waveform,
+    });
   }
 
   function teardownParts() {
@@ -200,6 +226,36 @@ export function mountEditor(root, id) {
   }
 
   // ---- actions --------------------------------------------------------------------------------
+  async function toggleCleanVoice(targetMode) {
+    if (cleaning || !S) return;
+    cleaning = true;
+    S.stop();
+    el.querySelector(".topbar")?.replaceWith(topbar());
+    refreshTopbar();
+    try {
+      const { job } = await api.preprocess(id, targetMode);
+      const done = await waitJob(job);
+      if (done.state === "error") throw { code: done.error };
+      data.project.preprocessed = done.result.preprocessed;
+      data.project.audioMode = done.result.audioMode;
+      S.project.preprocessed = done.result.preprocessed;
+      S.project.audioMode = done.result.audioMode;
+      await engine.load(api.audioUrl(id, Date.now()));
+      if (!alive) return;
+      peaks = buildPeaks(engine.buffer);
+      waveformRef?.setPeaks(peaks);
+      toast(t(targetMode === "clean" ? "editor.cleanedToast" : "editor.rawToast"));
+    } catch (err) {
+      toast(errorText(err), { error: true });
+    } finally {
+      cleaning = false;
+      if (alive) {
+        el.querySelector(".topbar")?.replaceWith(topbar());
+        refreshTopbar();
+      }
+    }
+  }
+
   async function rename(value) {
     const name = value.trim();
     if (!name || name === data.project.name) return;

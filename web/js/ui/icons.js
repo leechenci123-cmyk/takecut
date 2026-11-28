@@ -47,6 +47,8 @@ const P = {
   gauge: '<path d="M4.5 18a8 8 0 1 1 15 0"/><path d="m12 14 4-4"/>',
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
   rewind: '<path d="M11 18 4 12l7-6zM20 18l-7-6 7-6z"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8.5 21h7"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
 };
 
 const SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
