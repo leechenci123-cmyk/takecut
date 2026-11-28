@@ -116,6 +116,44 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(done["result"]["frames"], 44100 + 4410 + frames - 88200)
 
         self.assertEqual(self.json("POST", f"/api/projects/{pid}/export", {"format": "wav", "sampleRate": 22050, "segments": []})[0], 400)
+
+        # Preprocess voice cleanup on existing project and toggle Clean <-> Original
+        status, pjob = self.json("POST", f"/api/projects/{pid}/preprocess", {"mode": "clean"})
+        self.assertEqual(status, 202)
+        pdone = self.wait_job(pjob["job"])
+        self.assertEqual(pdone["state"], "done", pdone)
+        self.assertEqual(pdone["result"]["audioMode"], "clean")
+        self.assertTrue(pdone["result"]["preprocessed"])
+        meta_after = self.json("GET", f"/api/projects/{pid}")[1]["project"]
+        self.assertTrue(meta_after["preprocessed"])
+        self.assertEqual(meta_after["audioMode"], "clean")
+
+        status, rjob = self.json("POST", f"/api/projects/{pid}/preprocess", {"mode": "raw"})
+        self.assertEqual(status, 202)
+        rdone = self.wait_job(rjob["job"])
+        self.assertEqual(rdone["state"], "done", rdone)
+        self.assertEqual(rdone["result"]["audioMode"], "raw")
+
+        # Export synced line captions and download them
+        status, cap = self.json("POST", f"/api/projects/{pid}/export/captions", {
+            "format": "lrc", "content": "[00:00.00]有时候,一段口播要录好几遍。\n",
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(cap["file"].endswith(".lrc"))
+        status, cap_body, cap_headers = self.request("GET", f"/api/projects/{pid}/exports/{quote(cap['file'])}")
+        self.assertEqual(status, 200)
+        self.assertIn("attachment", cap_headers["Content-Disposition"])
+        self.assertIn("[00:00.00]", cap_body.decode("utf-8"))
+
+        # Export clean voice audio even when currently previewing raw audio
+        status, cjob = self.json("POST", f"/api/projects/{pid}/export", {
+            "format": "wav", "loudness": None, "cleanVoice": True, "denoise": False, "sampleRate": 44100,
+            "segments": [{"type": "audio", "start": 0, "end": 44100}],
+        })
+        self.assertEqual(status, 202)
+        cdone = self.wait_job(cjob["job"])
+        self.assertEqual(cdone["state"], "done", cdone)
+
         self.assertEqual(self.request("DELETE", f"/api/projects/{pid}")[0], 204)
         self.assertEqual(self.json("GET", f"/api/projects/{pid}")[0], 404)
 

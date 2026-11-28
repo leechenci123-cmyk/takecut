@@ -37,7 +37,9 @@ ROUTES = [
     ("PUT", rf"/api/projects/{PID}/edits", "edits"),
     ("GET", rf"/api/projects/{PID}/audio", "audio"),
     ("POST", rf"/api/projects/{PID}/transcribe", "retranscribe"),
+    ("POST", rf"/api/projects/{PID}/preprocess", "preprocess"),
     ("POST", rf"/api/projects/{PID}/export", "export"),
+    ("POST", rf"/api/projects/{PID}/export/captions", "export_captions"),
     ("GET", rf"/api/projects/{PID}/exports/([^/]+)", "download"),
     ("GET", r"/api/jobs/([0-9a-f]{32})", "job"),
     ("POST", r"/api/text/convert", "convert"),
@@ -89,7 +91,7 @@ def run_transcriber(source, folder, language, model, device, progress):
     raise JobError("transcribe-failed", f"[{device}] " + ((error or {}).get("detail") or "\n".join(tail)))
 
 
-def transcribe_work(ctx, pid, language, model, fresh):
+def transcribe_work(ctx, pid, language, model, fresh, clean_voice=True):
     store = ctx.store
 
     def work(progress):
@@ -101,10 +103,24 @@ def transcribe_work(ctx, pid, language, model, fresh):
             if inputs:
                 progress("decoding", 0.0)
                 info = media.probe(inputs[0])
-                media.decode(inputs[0], source, folder / "preview.wav", info["channels"], MAX_SECONDS)
-                inputs[0].unlink(missing_ok=True)
-                frames, rate, channels = media.wav_info(source)
-                store.update(pid, duration=round(frames / rate, 3), frames=frames, sampleRate=rate, channels=channels)
+                if clean_voice:
+                    raw = folder / "raw.wav"
+                    clean = folder / "clean.wav"
+                    media.decode_single(inputs[0], raw, info["channels"], MAX_SECONDS)
+                    inputs[0].unlink(missing_ok=True)
+                    progress("cleaning", 0.0)
+                    clean_info = media.clean_voice(raw, clean, folder / "preview.wav", info["channels"])
+                    shutil.copyfile(clean, source)
+                    frames, rate, channels = media.wav_info(source)
+                    store.update(pid, duration=round(frames / rate, 3), frames=frames, sampleRate=rate,
+                                 channels=channels, preprocessed=True, audioMode="clean",
+                                 noiseFloorDb=clean_info["noiseFloorDb"])
+                else:
+                    media.decode(inputs[0], source, folder / "preview.wav", info["channels"], MAX_SECONDS)
+                    inputs[0].unlink(missing_ok=True)
+                    frames, rate, channels = media.wav_info(source)
+                    store.update(pid, duration=round(frames / rate, 3), frames=frames, sampleRate=rate,
+                                 channels=channels, preprocessed=False, audioMode="raw")
             done = None
             for device in ctx.devices():
                 try:
@@ -122,6 +138,42 @@ def transcribe_work(ctx, pid, language, model, fresh):
         except Exception as exc:
             store.update(pid, status="error", job=None, error=getattr(exc, "code", None) or "failed")
             raise
+
+    return work
+
+
+def preprocess_work(ctx, pid, mode):
+    store = ctx.store
+
+    def work(progress):
+        folder = store.folder(pid)
+        source = folder / "source.wav"
+        preview = folder / "preview.wav"
+        raw = folder / "raw.wav"
+        clean = folder / "clean.wav"
+        if mode == "clean":
+            if not raw.is_file():
+                shutil.copyfile(source, raw)
+            if not clean.is_file():
+                progress("cleaning", 0.15)
+                _, _, ch = media.wav_info(raw)
+                clean_info = media.clean_voice(raw, clean, preview, ch)
+                shutil.copyfile(clean, source)
+                meta = store.update(pid, preprocessed=True, audioMode="clean",
+                                    noiseFloorDb=clean_info["noiseFloorDb"])
+            else:
+                progress("cleaning", 0.5)
+                shutil.copyfile(clean, source)
+                media.make_preview(source, preview)
+                meta = store.update(pid, preprocessed=True, audioMode="clean")
+        else:
+            if not raw.is_file():
+                raise MediaError("no-source", "Original audio not available")
+            progress("decoding", 0.5)
+            shutil.copyfile(raw, source)
+            media.make_preview(source, preview)
+            meta = store.update(pid, audioMode="raw")
+        return {"audioMode": meta["audioMode"], "preprocessed": meta["preprocessed"]}
 
     return work
 
@@ -322,6 +374,7 @@ class Handler(BaseHTTPRequestHandler):
         model = self.headers.get("X-Model") or transcribe.default_model()
         if model not in transcribe.MODEL_CHOICES:
             raise BadRequest("bad-model")
+        clean_voice = (self.headers.get("X-Clean-Voice") or "1") != "0"
         tmp = store.tmp / uuid.uuid4().hex
         try:
             with tmp.open("wb") as out:
@@ -335,11 +388,12 @@ class Handler(BaseHTTPRequestHandler):
             info = media.probe(tmp)
             if info["duration"] > MAX_SECONDS + 1:
                 raise BadRequest("too-long", 413)
-            meta = store.create(stem, language=language, model=model)
+            meta = store.create(stem, language=language, model=model, preprocessed=clean_voice)
             shutil.move(str(tmp), store.folder(meta["id"]) / f"input.{ext}")
         finally:
             tmp.unlink(missing_ok=True)
-        job = self.ctx.jobs.submit("transcribe", meta["id"], transcribe_work(self.ctx, meta["id"], language, model, True))
+        job = self.ctx.jobs.submit("transcribe", meta["id"],
+                                   transcribe_work(self.ctx, meta["id"], language, model, True, clean_voice))
         store.update(meta["id"], job=job["id"], duration=round(info["duration"], 3), channels=min(2, info["channels"]))
         self.json({"id": meta["id"], "job": job["id"]}, 202)
 
@@ -386,6 +440,20 @@ class Handler(BaseHTTPRequestHandler):
         store.update(pid, status="queued", job=job["id"], language=language, error=None)
         self.json({"job": job["id"]}, 202)
 
+    def api_preprocess(self, pid):
+        body = self.body()
+        mode = body.get("mode", "clean")
+        if mode not in ("clean", "raw"):
+            raise BadRequest("bad-options")
+        self.busy(pid)
+        folder = self.ctx.store.folder(pid)
+        if not (folder / "source.wav").is_file():
+            raise BadRequest("no-source")
+        if mode == "raw" and not (folder / "raw.wav").is_file():
+            raise BadRequest("no-source")
+        job = self.ctx.jobs.submit("preprocess", pid, preprocess_work(self.ctx, pid, mode))
+        self.json({"job": job["id"]}, 202)
+
     def api_export(self, pid):
         body = self.body()
         store = self.ctx.store
@@ -394,6 +462,10 @@ class Handler(BaseHTTPRequestHandler):
         fmt = body.get("format", "wav")
         loudness = body.get("loudness")
         denoise = bool(body.get("denoise"))
+        clean_voice = bool(body.get("cleanVoice"))
+        already_clean = bool(meta.get("preprocessed") and meta.get("audioMode", "clean") == "clean")
+        if clean_voice and not already_clean:
+            denoise = True
         if fmt not in render.FORMATS or (loudness is not None and loudness not in render.LOUDNESS):
             raise BadRequest("bad-options")
         frames, rate, _ = media.wav_info(folder / "source.wav")
@@ -405,8 +477,21 @@ class Handler(BaseHTTPRequestHandler):
             raise BadRequest("bad-segments")
         segments = body["segments"]
         job = self.ctx.jobs.submit("export", pid, lambda progress: render.render(
-            folder, meta["name"], segments, fmt, loudness, denoise, progress))
+            folder, meta["name"], segments, fmt, loudness, denoise, progress, preprocessed=already_clean))
         self.json({"job": job["id"]}, 202)
+
+    def api_export_captions(self, pid):
+        body = self.body()
+        store = self.ctx.store
+        meta = store.get(pid)
+        folder = store.folder(pid)
+        fmt = body.get("format", "srt")
+        content = body.get("content")
+        try:
+            result = render.save_captions(folder, meta["name"], fmt, content)
+        except ValueError:
+            raise BadRequest("bad-options")
+        self.json(result, 200)
 
     def api_download(self, pid, name):
         name = unquote(name)
@@ -415,7 +500,11 @@ class Handler(BaseHTTPRequestHandler):
         path = self.ctx.store.folder(pid) / "exports" / name
         if not path.is_file():
             raise NotFound(name)
-        mime = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4"}.get(path.suffix, "application/octet-stream")
+        mime = {
+            ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4",
+            ".srt": "application/x-subrip; charset=utf-8", ".vtt": "text/vtt; charset=utf-8",
+            ".lrc": "text/plain; charset=utf-8", ".txt": "text/plain; charset=utf-8",
+        }.get(path.suffix, "application/octet-stream")
         self.send_file(path, mime, download=name)
 
     def api_job(self, job_id):

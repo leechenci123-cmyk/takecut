@@ -84,7 +84,7 @@ class Store:
             write_json(path, meta)
             return meta
 
-    def create(self, name, language="auto", model=None, sample=None):
+    def create(self, name, language="auto", model=None, sample=None, preprocessed=False):
         pid = uuid.uuid4().hex
         folder = self.dir / pid
         folder.mkdir()
@@ -92,6 +92,7 @@ class Store:
         meta = {"id": pid, "name": name, "created": now, "updated": now, "status": "queued", "error": None,
                 "duration": 0, "sampleRate": SAMPLE_RATE, "channels": 1, "language": language,
                 "detectedLanguage": None, "model": model, "device": None, "sample": sample, "job": None,
+                "preprocessed": bool(preprocessed), "audioMode": "clean" if preprocessed else "raw",
                 "stats": None}
         write_json(folder / "edits.json", EMPTY_EDITS)
         write_json(folder / "project.json", meta)

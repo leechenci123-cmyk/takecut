@@ -69,6 +69,47 @@ class RenderTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             render.render(self.dir, "x", [{"type": "audio", "start": 0, "end": 10}], "wav", loudness=-20)
 
+    def test_clean_voice_reduces_noise_and_keeps_exact_frames(self):
+        import wave
+        import numpy as np
+
+        sr = RATE
+        t = np.arange(sr * 3, dtype=np.float32) / sr
+        rng = np.random.default_rng(7)
+        noise = 0.04 * rng.standard_normal(len(t)) + 0.05 * np.sin(2 * np.pi * 50 * t)
+        voice = np.zeros_like(t)
+        mask = (t >= 1.0) & (t < 2.0)
+        voice[mask] = 0.25 * np.sin(2 * np.pi * 240 * t[mask]) + 0.14 * np.sin(2 * np.pi * 720 * t[mask])
+        sig = np.clip(voice + noise, -0.99, 0.99)
+        raw = self.dir / "noisy.wav"
+        clean = self.dir / "clean.wav"
+        preview = self.dir / "preview.wav"
+        with wave.open(str(raw), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            w.writeframes((sig * 32767).astype("<i2").tobytes())
+
+        info = media.clean_voice(raw, clean, preview, channels=1)
+        self.assertEqual(media.wav_info(clean), (sr * 3, sr, 1))
+        self.assertEqual(media.wav_info(preview), (sr * 3, sr, 1))
+        self.assertLessEqual(info["noiseFloorDb"], -20.0)
+        with wave.open(str(clean), "rb") as w:
+            out = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32768.0
+        rms_db = lambda x: float(20 * np.log10(np.sqrt(np.mean(x * x)) + 1e-9))
+        raw_snr = rms_db(sig[sr:2 * sr]) - rms_db(sig[:sr])
+        clean_snr = rms_db(out[sr:2 * sr]) - rms_db(out[:sr])
+        self.assertGreater(clean_snr, raw_snr + 4.0)
+
+    def test_save_captions(self):
+        saved = render.save_captions(self.dir, "Demo", "srt", "1\r\n00:00:00,000 --> 00:00:01,000\r\nHello\r\n")
+        self.assertEqual(saved["file"], "Demo-takecut.srt")
+        self.assertTrue((self.dir / "exports" / "Demo-takecut.srt").is_file())
+        saved_lrc = render.save_captions(self.dir, "Demo", "lrc", "[00:00.00]Hello\n")
+        self.assertEqual(saved_lrc["file"], "Demo-takecut.lrc")
+        with self.assertRaises(ValueError):
+            render.save_captions(self.dir, "Demo", "exe", "bad")
+
 
 if __name__ == "__main__":
     unittest.main()

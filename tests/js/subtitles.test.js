@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { splitLines } from "../../web/js/core/lines.js";
 import { buildPlan } from "../../web/js/core/timeline.js";
 import { applyCut, emptyEdits, fixWord, setPause } from "../../web/js/core/edits.js";
-import { buildCues, toSRT, toVTT, toTXT, srtTime, stripPunctuation } from "../../web/js/core/subtitles.js";
+import { buildCues, toSRT, toVTT, toLRC, toTimedTXT, toTXT, srtTime, lrcTime, stripPunctuation } from "../../web/js/core/subtitles.js";
 import { sampleWords, near, spaced } from "./helpers.js";
 
 const SR = 44100, DURATION = 21.8;
@@ -70,4 +70,15 @@ test("English words keep their spacing", () => {
   const e = emptyEdits();
   const cues = buildCues(en, l, e, buildPlan({ duration: 2, sampleRate: SR, cuts: [], pauses: [] }));
   assert.equal(cues[0].text, "Hello there, friend.");
+});
+
+test("LRC and timestamped TXT line captions", () => {
+  assert.equal(lrcTime(0), "00:00.00");
+  assert.equal(lrcTime(65.432), "01:05.43");
+  const e = applyCut(emptyEdits(), [[3.785, 6.22]], ctx).edits;
+  const cues = buildCues(zh, lines, e, plan(e));
+  const lrc = toLRC(cues);
+  assert.ok(lrc.startsWith("[00:00.00]有时候,一段口播要录好几遍。\n"));
+  const timed = toTimedTXT(cues);
+  assert.ok(timed.startsWith("[00:00.00 - 00:02.76] 有时候,一段口播要录好几遍。\n"));
 });

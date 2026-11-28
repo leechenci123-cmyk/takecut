@@ -94,6 +94,65 @@ def decode(src, source_wav, preview_wav, channels, max_seconds):
          *common, "-ac", "1", str(preview_wav)])
 
 
+def decode_single(src, out_wav, channels, max_seconds):
+    """Decode the first audio stream to a single full-quality PCM WAV."""
+    ch = "2" if channels >= 2 else "1"
+    run([ffmpeg(), "-nostdin", "-v", "error", "-y", *SAFE, "-t", str(max_seconds), "-i", str(src),
+         "-map", "0:a:0", "-vn", "-ar", str(SAMPLE_RATE), "-ac", ch, "-c:a", "pcm_s16le", str(out_wav)])
+
+
+def estimate_noise_floor(path, default=-25.0):
+    """Estimate the stationary background noise floor in dBFS from 20 ms RMS frames."""
+    try:
+        import numpy as np
+
+        pcm = pcm16k(path)
+        n = 320  # 20 ms at 16 kHz
+        frames = len(pcm) // n
+        if frames < 5:
+            return default
+        x = pcm[: frames * n].reshape(frames, n)
+        rms = np.sqrt(np.mean(x * x, axis=1)) + 1e-9
+        db = 20.0 * np.log10(rms)
+        floor = float(np.percentile(db, 10))
+        return max(-50.0, min(-20.0, round(floor + 4.0, 1)))
+    except Exception:
+        return default
+
+
+def voice_clean_filter(noise_floor=-25.0, light=False):
+    """FFmpeg audio filter chain that suppresses hum, rumble, clicks and broadband noise
+    while keeping human speech clean, clear and natural."""
+    nf = max(-50.0, min(-20.0, float(noise_floor)))
+    if light:
+        return f"highpass=f=85:p=2,afftdn=nr=10:nf={min(-30.0, nf):.1f}:tn=1"
+    return (
+        "highpass=f=90:p=2,"
+        "lowpass=f=11000:p=2,"
+        "adeclick=w=55:o=75:t=2.5,"
+        f"afftdn=nr=22:nf={nf:.1f}:tn=1,"
+        "anlmdn=s=0.0012:p=0.004:r=0.01:m=15,"
+        "acompressor=threshold=-24dB:ratio=2:attack=10:release=140:makeup=1.5,"
+        "alimiter=limit=0.95:attack=5:release=50"
+    )
+
+
+def clean_voice(raw_wav, clean_wav, preview_wav=None, channels=None):
+    """Preprocess raw_wav to suppress background noise and isolate clean human voice.
+    Preserves the exact frame count of raw_wav so transcript timestamps remain aligned."""
+    raw_frames, rate, src_ch = wav_info(raw_wav)
+    ch = str(2 if (channels or src_ch) >= 2 else 1)
+    nf = estimate_noise_floor(raw_wav)
+    af = f"{voice_clean_filter(nf)},atrim=end_sample={raw_frames},asetpts=PTS-STARTPTS"
+    common = ["-af", af, "-ar", str(rate), "-c:a", "pcm_s16le"]
+    cmd = [ffmpeg(), "-nostdin", "-v", "error", "-y", *SAFE, "-i", str(raw_wav),
+           *common, "-ac", ch, str(clean_wav)]
+    if preview_wav is not None:
+        cmd.extend([*common, "-ac", "1", str(preview_wav)])
+    run(cmd)
+    return {"noiseFloorDb": round(nf, 1), "frames": raw_frames}
+
+
 def make_preview(source_wav, preview_wav):
     run([ffmpeg(), "-nostdin", "-v", "error", "-y", *SAFE, "-i", str(source_wav),
          "-ac", "1", "-ar", str(SAMPLE_RATE), "-c:a", "pcm_s16le", str(preview_wav)])

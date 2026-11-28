@@ -101,7 +101,8 @@ def measure_loudness(path, target):
     return json.loads(m.group(0))
 
 
-def render(project_dir, name, segments, fmt="wav", loudness=None, denoise=False, progress=lambda *a: None):
+def render(project_dir, name, segments, fmt="wav", loudness=None, denoise=False,
+           progress=lambda *a: None, preprocessed=False):
     project_dir = Path(project_dir)
     source = project_dir / "source.wav"
     total_frames, sample_rate, channels = media.wav_info(source)
@@ -113,7 +114,11 @@ def render(project_dir, name, segments, fmt="wav", loudness=None, denoise=False,
 
     graph, frames = build_graph(segs, sample_rate, channels)
     if denoise:
-        graph = graph.replace("[edit]", "[raw]") + ";\n[raw]afftdn=nf=-25[edit]"
+        if preprocessed:
+            chain = media.voice_clean_filter(light=True)
+        else:
+            chain = media.voice_clean_filter(media.estimate_noise_floor(source), light=False)
+        graph = graph.replace("[edit]", "[raw]") + f";\n[raw]{chain}[edit]"
     seconds = frames / sample_rate
     exports = project_dir / "exports"
     exports.mkdir(exist_ok=True)
@@ -143,3 +148,19 @@ def render(project_dir, name, segments, fmt="wav", loudness=None, denoise=False,
         for tmp in (graph_file, edit_wav):
             tmp.unlink(missing_ok=True)
     return {"file": out.name, "size": out.stat().st_size, "duration": round(seconds, 3), "frames": frames}
+
+
+CAPTION_FORMATS = {"srt", "vtt", "lrc", "txt"}
+
+
+def save_captions(project_dir, name, fmt, content):
+    """Save an exported caption file alongside exported audio under project_dir/exports/."""
+    if fmt not in CAPTION_FORMATS:
+        raise ValueError("caption-format")
+    if not isinstance(content, str):
+        raise ValueError("caption-content")
+    exports = Path(project_dir) / "exports"
+    exports.mkdir(exist_ok=True)
+    out = exports / f"{safe_name(name)}-takecut.{fmt}"
+    out.write_text(content, encoding="utf-8")
+    return {"file": out.name, "size": out.stat().st_size}
